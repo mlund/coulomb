@@ -21,9 +21,9 @@
 //! where $r$ is the distance between the interacting particles and $r_c$ is the cutoff distance.
 //! From this, all multipolar interactions can be derived, and e.g. the monopole-monopole energy between two
 //! point charges, $q_1$ and $q_2$ is:
-//! 
+//!
 //! $$ u(r) = \frac{q_1 q_2}{4\pi\varepsilon_0\varepsilon_r r} \cdot e^{-\kappa r} \cdot S(q)$$
-//! 
+//!
 //! where $\kappa$ is the inverse Debye screening length.
 //! From this, the generic Coulomb energy is recovered with
 //! $S(q) = 1$, $r_c = \infty$, and $\kappa = 0$.
@@ -46,21 +46,20 @@ mod poisson;
 use crate::{Matrix3, Vector3};
 pub use poisson::*;
 
-/// # Short-range function for electrostatic interaction schemes
+/// Short-range function for electrostatic interaction schemes
 ///
 /// The short-range function, $S(q)$, is a function of the reduced distance $q = r/r_c$,
 /// where $r$ is the distance between the interacting particles and $r_c$
 /// is a spherical cutoff distance.
 /// All _schemes_ implement this trait and is a requirement for the
-/// `Potential`;
-/// `Field`;
-/// `Force`; and `Energy` traits.
+/// [`MultipolePotential`];
+/// [`MultipoleField`];
+/// [`MultipoleForce`]; and
+/// [`MultipoleEnergy`] traits.
 /// In connection with Ewald summation scemes, the short-range function is also known as the
 /// _splitting function_.
-/// There it is used to split the electrostatic interaction into a short-range part and a long-range part.
-/// The energy between two point charges is,
-/// $$ u(r) = \frac{q_1 q_2}{r} \cdot e^{-\kappa r} \cdot S(q) $$
-/// and all other quantities are derived from this.
+/// There it is used to split the electrostatic interaction into a short-range part and
+/// a long-range part.
 pub trait ShortRangeFunction: crate::Cutoff {
     /// Inverse Debye screening length.
     ///
@@ -79,7 +78,7 @@ pub trait ShortRangeFunction: crate::Cutoff {
     fn short_range_f0(&self, q: f64) -> f64;
 
     /// First derivative of the short-range function, 𝑑𝑆(𝑞)/𝑑𝑞.
-    /// 
+    ///
     /// The default implementation uses a numerical central difference using
     /// `short_range_f0`. For better performance, this should be
     /// overridden with an analytical expression.
@@ -89,8 +88,8 @@ pub trait ShortRangeFunction: crate::Cutoff {
     }
 
     /// Second derivative of the short-range function, 𝑑²𝑆(𝑞)/𝑑𝑞².
-    /// 
-    /// The default implementation uses a numerical central difference using
+    ///
+    /// The default implementation uses a numerical central difference of
     /// `short_range_f1`. For better performance, this should be
     /// overridden with an analytical expression.
     fn short_range_f2(&self, q: f64) -> f64 {
@@ -99,20 +98,20 @@ pub trait ShortRangeFunction: crate::Cutoff {
     }
 
     /// Third derivative of the short-range function, 𝑑³𝑆(𝑞)/𝑑𝑞³.
-    /// 
-    /// The default implementation uses a numerical central difference using
+    ///
+    /// The default implementation uses a numerical central difference of
     /// `short_range_f2`. For better performance, this should be
     /// overridden with an analytical expression.
     fn short_range_f3(&self, q: f64) -> f64 {
         const EPS: f64 = 1e-6;
         (self.short_range_f2(q + EPS) - self.short_range_f2(q - EPS)) / (2.0 * EPS)
-    
     }
 }
 
-/// # Potential from electric multipoles
+/// Electric potential from point multipoles
 pub trait MultipolePotential: ShortRangeFunction {
     #[inline]
+    /// Electrostatic potential from a point charge.
     fn ion_potential(&self, charge: f64, distance: f64) -> f64 {
         if distance >= self.cutoff() {
             return 0.0;
@@ -138,18 +137,19 @@ pub trait MultipolePotential: ShortRangeFunction {
         if r_squared >= self.cutoff_squared() {
             return 0.0;
         }
-        let r1 = r.norm();
-        let q = r1 / self.cutoff();
+        let r_norm = r.norm();
+        let q = r_norm / self.cutoff();
         if let Some(kappa) = self.kappa() {
-            let kr = kappa * r1;
-            dipole.dot(r) / (r_squared * r1)
+            let kr = kappa * r_norm;
+            dipole.dot(r) / (r_squared * r_norm)
                 * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
-            dipole.dot(r) / (r_squared * r1) * self.short_range_f0(q)
+            dipole.dot(r) / (r_squared * r_norm) * self.short_range_f0(q)
         }
     }
 
+    /// Electrostatic potential from a point quadrupole.
     fn quadrupole_potential(&self, quad: &Matrix3, r: &Vector3) -> f64 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {

@@ -30,21 +30,21 @@ impl<const C: i32, const D: i32> MultipoleForce for Poisson<C, D> {}
 /// which can be used to arbitrarily cancel derivatives at the origin and at the cut-off.
 /// From the Conclusion of
 /// [doi:10.1088/1367-2630/ab1ec1](http://dx.doi.org/10.1088/1367-2630/ab1ec1):
-/// 
+///
 /// _"We have presented truncated pair-potentials for electrostatic interactions which as
 /// closely as possible solves the Poisson equation. Starting from the Poisson equation,
 /// we find two incompatible constraints on $S(q)$:
 /// cancellation of the zeroth and first order derivative at the cut-off, and zero-valued
 /// second order derivative at the entire interval."_
-/// 
+///
 /// The general short-range function is:
 /// $$
 /// S(q) = (1 - q)^{D + 1} \sum_{c = 0}^{C - 1} \frac{C - c}{C} \binom{D - 1 + c}{c} q^c
 /// $$
-/// 
+///
 /// where $C$ is the number of cancelled derivatives at origin -2 (starting from the second derivative),
 /// and $D$ is the number of cancelled derivatives at the cut-off (starting from the zeroth derivative).
-/// 
+///
 /// For infinite Debye-length, $\kappa=0$, the [`Poisson`] scheme captures several
 /// other truncation schemes by setting $C$ and $D$ according to this table:
 ///
@@ -58,7 +58,7 @@ impl<const C: i32, const D: i32> MultipoleForce for Poisson<C, D> {}
 /// | `fukuda`      | 2   | 1   | Scheme for [Undamped Fukuda](https://doi.org/10.1063/1.3582791)
 /// | `markland`    | 2   | 2   | Scheme for [Markland](https://doi.org/10.1016/j.cplett.2008.09.019)
 /// | `stenqvist`   | 3   | 3   | Scheme for [Stenqvist](https://doi.org/10/c5fr)
-/// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520), 
+/// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520),
 ///
 /// More info:
 /// - <http://dx.doi.org/10.1088/1367-2630/ab1ec1>

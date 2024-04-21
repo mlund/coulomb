@@ -13,22 +13,22 @@
 // limitations under the license.
 
 //! # Electrostatic Interactions and Electrolyte Solutions
-//! 
+//!
 //! This library provides supoprt for working with electrostatic interactions
 //! in _e.g._ molecular systems.
 //! This includes:
-//! 
+//!
 //! - Setting up a background dielectric medium.
 //! - Handling of electrolyte solutions with salt of arbitrary valency and ionic strength.
 //! - Calculation of pairwise interactions between ions and point multipoles using
 //!   (truncated) potentials.
-//! 
+//!
 //! ## Interactions between Multipoles
-//! 
+//!
 //! Please see the [`pairwise`] module.
 //!
 //! ## Electrolyte Solutions
-//! 
+//!
 //! This provides support for calculating properties of electrolyte solutions
 //! such as the
 //! [Debye length](https://en.wikipedia.org/wiki/Debye_length),
@@ -67,15 +67,16 @@ pub type Vector3 = nalgebra::Vector3<f64>;
 /// A 3x3 matrix
 pub type Matrix3 = nalgebra::Matrix3<f64>;
 
-pub mod pairwise;
 mod math;
+pub mod pairwise;
 mod spline;
 
+use anyhow::Result;
 use physical_constants::{
-    AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY, BOLTZMANN_CONSTANT
+    AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT,
+    VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use std::f64::consts::PI;
-use anyhow::Result;
 
 mod permittivity;
 pub use permittivity::{EmpiricalPermittivity, RelativePermittivity};
@@ -89,11 +90,12 @@ pub trait Temperature {
     /// Get the temperature in Kelvin
     fn temperature(&self) -> f64;
     /// Set the temperature in Kelvin.
-    /// 
+    ///
     /// The default implementation returns an error.
     fn set_temperature(&mut self, _temperature: f64) -> Result<()> {
-        Err(anyhow::anyhow!("Setting the temperature is not implemented"))
-    
+        Err(anyhow::anyhow!(
+            "Setting the temperature is not implemented"
+        ))
     }
 }
 
@@ -102,7 +104,7 @@ pub trait IonicStrength {
     /// Get the ionic strength in mol/l
     fn ionic_strength(&self) -> f64;
     /// Try to set the ionic strength in mol/l
-    /// 
+    ///
     /// The default implementation returns an error.
     fn set_ionic_strength(&mut self, _ionic_strength: f64) -> Result<()> {
         Err(anyhow::anyhow!(
