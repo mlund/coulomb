@@ -20,20 +20,19 @@ use crate::ELECTRIC_PREFACTOR;
 use crate::{Matrix3, Vector3};
 #[cfg(test)]
 use approx::assert_relative_eq;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-impl MultipolePotential for Coulomb {}
-impl MultipoleField for Coulomb {}
-impl MultipoleEnergy for Coulomb {}
-impl MultipoleForce for Coulomb {}
+impl MultipolePotential for Plain {}
+impl MultipoleField for Plain {}
+impl MultipoleEnergy for Plain {}
+impl MultipoleForce for Plain {}
 
-/// # Scheme for vanilla coulomb interactions, $S(q)=1$.
-///
-/// In this scheme, the short-range function is _S(q)_ = 1.
-#[derive(Clone, Copy, Debug)]
+/// Scheme for vanilla Coulomb interactions, $S(q)=1$.
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Coulomb {
+pub struct Plain {
     /// Cut-off distance
     cutoff: f64,
     /// Optional inverse Debye length
@@ -42,7 +41,7 @@ pub struct Coulomb {
     prefactor: f64,
 }
 
-impl Coulomb {
+impl Plain {
     pub fn new(permittivity: f64, cutoff: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
@@ -52,7 +51,7 @@ impl Coulomb {
     }
 }
 
-impl crate::Info for Coulomb {
+impl crate::Info for Plain {
     fn short_name(&self) -> Option<&'static str> {
         Some("coulomb")
     }
@@ -64,14 +63,14 @@ impl crate::Info for Coulomb {
     }
 }
 
-impl crate::Cutoff for Coulomb {
+impl crate::Cutoff for Plain {
     #[inline]
     fn cutoff(&self) -> f64 {
         self.cutoff
     }
 }
 
-impl ShortRangeFunction for Coulomb {
+impl ShortRangeFunction for Plain {
     #[inline]
     fn prefactor(&self) -> f64 {
         self.prefactor
@@ -115,7 +114,7 @@ fn test_coulomb() {
     ); // distance vector for quadrupole check
     let rh = Vector3::new(1.0, 0.0, 0.0); // normalized distance vector
 
-    let pot = Coulomb::new(80.0, cutoff, None);
+    let pot = Plain::new(80.0, cutoff, None);
     let eps = 1e-9;
 
     // Test short-ranged function
@@ -234,7 +233,7 @@ fn test_coulomb() {
     assert_relative_eq!(force[2], -0.002551448858, epsilon = eps);
 
     // Now test with a non-zero kappa
-    let pot = Coulomb::new(80.0, cutoff, Some(23.0));
+    let pot = Plain::new(80.0, cutoff, Some(23.0));
     assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);
     assert_relative_eq!(
         pot.ion_potential(z1, r.norm()),

@@ -40,8 +40,8 @@
 
 mod ewald;
 pub use ewald::*;
-mod coulomb;
-pub use coulomb::Coulomb;
+mod plain;
+pub use plain::Plain;
 mod poisson;
 use crate::{Matrix3, Vector3};
 pub use poisson::*;
