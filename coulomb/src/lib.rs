@@ -45,8 +45,8 @@
 //! # use approx::assert_relative_eq;
 //! use coulomb::*;
 //! let medium = Medium::neat_water(298.15);
-//! assert_relative_eq!(medium.permittivity(298.15).unwrap(), 78.35565171480539);
-//! assert_relative_eq!(medium.ionic_strength(), 0.0);
+//! assert_relative_eq!(medium.permittivity().unwrap(), 78.35565171480539);
+//! assert!(medium.ionic_strength().is_none());
 //! assert!(medium.debye_length().is_none());
 //! ~~~
 //!
@@ -56,7 +56,7 @@
 //! # use approx::assert_relative_eq;
 //! # use coulomb::{Medium, Salt, DebyeLength, IonicStrength};
 //! let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
-//! assert_relative_eq!(medium.ionic_strength(), 0.3);
+//! assert_relative_eq!(medium.ionic_strength().unwrap(), 0.3);
 //! assert_relative_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 //! ~~~
 
@@ -102,7 +102,11 @@ pub trait Temperature {
 /// Trait for objects that has an ionic strength
 pub trait IonicStrength {
     /// Get the ionic strength in mol/l
-    fn ionic_strength(&self) -> f64;
+    /// 
+    /// The default implementation returns `None`.
+    fn ionic_strength(&self) -> Option<f64> {
+        None
+    }
     /// Try to set the ionic strength in mol/l
     ///
     /// The default implementation returns an error.
@@ -122,12 +126,7 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
     fn debye_length(&self) -> Option<f64> {
         let temperature = self.temperature();
         let permittivity = self.permittivity(temperature).unwrap();
-        let ionic_strength = self.ionic_strength();
-        if ionic_strength > 0.0 {
-            Some(debye_length(temperature, permittivity, ionic_strength))
-        } else {
-            None
-        }
+        self.ionic_strength().map(|i| debye_length(temperature, permittivity, i))
     }
     /// Inverse Debye length in inverse angstrom or `None` if the ionic strength is zero.
     ///
