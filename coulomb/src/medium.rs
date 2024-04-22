@@ -30,6 +30,7 @@ use core::fmt::{Display, Formatter};
 /// approx::assert_abs_diff_eq!(medium.ionic_strength().unwrap(), 0.3);
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 /// ~~~
+#[derive(Clone)]
 pub struct Medium {
     /// Relative permittivity of the medium
     permittivity: Box<dyn RelativePermittivity>,
@@ -78,7 +79,9 @@ impl Medium {
 
     /// Change the molarity of the salt solution. Error if no salt type is defined.
     pub fn set_molarity(&mut self, molality: f64) -> Result<()> {
-        assert!(molality >= 0.0, "Molarity must be non-negative");
+        if molality < 0.0 {
+            anyhow::bail!("Molarity must be positive")
+        }
         if let Some((salt, _)) = &self.salt {
             self.salt = Some((salt.clone(), molality));
             Ok(())
@@ -104,16 +107,22 @@ impl Display for Medium {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, 𝐼 = {:.1} mM, λᴮ = {:.1} Å, λᴰ = {:.1} Å",
+            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, λᴮ = {:.1} Å",
             self.temperature,
             self.permittivity.permittivity(self.temperature).unwrap(),
-            self.ionic_strength().unwrap_or(0.0) * 1e3,
             self.bjerrum_length(),
-            self.debye_length().unwrap_or(f64::INFINITY),
         )
         .unwrap();
         if let Some((salt, molarity)) = &self.salt {
-            write!(f, ", {:.1} M {}", molarity, salt).unwrap()
+            write!(
+                f,
+                ", 𝐼 = {:.1} mM, λᴰ = {:.1} Å, {:.1} M {}",
+                self.ionic_strength().unwrap(),
+                self.debye_length().unwrap(),
+                molarity,
+                salt
+            )
+            .unwrap();
         };
         Ok(())
     }
@@ -125,9 +134,13 @@ impl Temperature for Medium {
     }
     /// Set temperature and ensure that it's within the range of the permittivity model
     fn set_temperature(&mut self, temperature: f64) -> anyhow::Result<()> {
-        self.permittivity.permittivity(temperature)?;
-        self.temperature = temperature;
-        Ok(())
+        if self.permittivity.temperature_is_ok(temperature) {
+            self.temperature = temperature;
+            return Ok(());
+        }
+        Err(anyhow::anyhow!(
+            "Temperature out of range for permittivity model"
+        ))
     }
 }
 impl RelativePermittivity for Medium {
@@ -135,6 +148,7 @@ impl RelativePermittivity for Medium {
         self.permittivity.permittivity(temperature)
     }
 }
+
 impl IonicStrength for Medium {
     fn ionic_strength(&self) -> Option<f64> {
         self.salt

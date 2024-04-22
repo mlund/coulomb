@@ -1,18 +1,22 @@
 use anyhow::Result;
 use core::fmt;
 use core::fmt::{Display, Formatter};
+use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Trait for objects that has a relative permittivity
-pub trait RelativePermittivity {
+pub trait RelativePermittivity: DynClone {
     /// Get the relative permittivity. May error if the temperature is out of range.
     fn permittivity(&self, temperature: f64) -> Result<f64>;
-    /// Set the relative permittivity
-    fn set_permittivity(&mut self, _permittivity: f64) -> Result<()> {
-        Err(anyhow::anyhow!("Setting permittivity is not implemented"))
+
+    /// Test is temperature is within range
+    fn temperature_is_ok(&self, temperature: f64) -> bool {
+        self.permittivity(temperature).is_ok()
     }
 }
+
+dyn_clone::clone_trait_object!(RelativePermittivity);
 
 /// Empirical model for the temperature dependent relative permittivity, εᵣ(𝑇),
 ///

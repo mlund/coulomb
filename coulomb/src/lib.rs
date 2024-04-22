@@ -102,7 +102,7 @@ pub trait Temperature {
 /// Trait for objects that has an ionic strength
 pub trait IonicStrength {
     /// Get the ionic strength in mol/l
-    /// 
+    ///
     /// The default implementation returns `None`.
     fn ionic_strength(&self) -> Option<f64> {
         None
@@ -126,7 +126,8 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
     fn debye_length(&self) -> Option<f64> {
         let temperature = self.temperature();
         let permittivity = self.permittivity(temperature).unwrap();
-        self.ionic_strength().map(|i| debye_length(temperature, permittivity, i))
+        self.ionic_strength()
+            .map(|i| debye_length(temperature, permittivity, i))
     }
     /// Inverse Debye length in inverse angstrom or `None` if the ionic strength is zero.
     ///
