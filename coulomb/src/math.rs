@@ -1,5 +1,5 @@
 #[cfg(test)]
-use assert_approx_eq::assert_approx_eq;
+use approx::assert_relative_eq;
 
 /// Approximation of erfc-function
 ///
@@ -110,28 +110,34 @@ mod tests {
         assert_eq!(_q_pochhammer_symbol(0.0, 0, 1), 1.0);
         assert_eq!(_q_pochhammer_symbol(1.0, 0, 1), 0.0);
         assert_eq!(_q_pochhammer_symbol(1.0, 1, 2), 0.0);
-        assert_approx_eq!(_q_pochhammer_symbol(0.75, 0, 2), 0.109375);
-        assert_approx_eq!(_q_pochhammer_symbol(2.0 / 3.0, 2, 5), 0.4211104676);
-        assert_approx_eq!(_q_pochhammer_symbol(0.125, 1, 1), 0.984375);
-        assert_approx_eq!(_q_pochhammer_symbol_derivative(0.75, 0, 2), -0.8125);
-        assert_approx_eq!(
+        assert_relative_eq!(_q_pochhammer_symbol(0.75, 0, 2), 0.109375);
+        assert_relative_eq!(
+            _q_pochhammer_symbol(2.0 / 3.0, 2, 5),
+            0.4211104676,
+            epsilon = 1e-5
+        );
+        assert_relative_eq!(_q_pochhammer_symbol(0.125, 1, 1), 0.984375);
+        assert_relative_eq!(_q_pochhammer_symbol_derivative(0.75, 0, 2), -0.8125);
+        assert_relative_eq!(
             _q_pochhammer_symbol_derivative(2.0 / 3.0, 2, 5),
-            -2.538458169
+            -2.538458169,
+            epsilon = 1e-5
         );
-        assert_approx_eq!(_q_pochhammer_symbol_derivative(0.125, 1, 1), -0.25);
-        assert_approx_eq!(_q_pochhammer_symbol_second_derivative(0.75, 0, 2), 2.5);
-        assert_approx_eq!(
+        assert_relative_eq!(_q_pochhammer_symbol_derivative(0.125, 1, 1), -0.25);
+        assert_relative_eq!(_q_pochhammer_symbol_second_derivative(0.75, 0, 2), 2.5);
+        assert_relative_eq!(
             _q_pochhammer_symbol_second_derivative(2.0 / 3.0, 2, 5),
-            -1.444601767
+            -1.444601767,
+            epsilon = 1e-5
         );
-        assert_approx_eq!(_q_pochhammer_symbol_second_derivative(0.125, 1, 1), -2.0);
-        // assert_approx_eq!(q_pochhammer_symbol_third_derivative(0.75, 0, 2), 6.0);
-        // assert_approx_eq!(
+        assert_relative_eq!(_q_pochhammer_symbol_second_derivative(0.125, 1, 1), -2.0);
+        // assert_relative_eq!(q_pochhammer_symbol_third_derivative(0.75, 0, 2), 6.0);
+        // assert_relative_eq!(
         //     q_pochhammer_symbol_third_derivative(2.0 / 3.0, 2, 5),
         //     92.48631425
         // );
-        // assert_approx_eq!(q_pochhammer_symbol_third_derivative(0.125, 1, 1), 0.0);
-        // assert_approx_eq!(
+        // assert_relative_eq!(q_pochhammer_symbol_third_derivative(0.125, 1, 1), 0.0);
+        // assert_relative_eq!(
         //     q_pochhammer_symbol_third_derivative(0.4, 3, 7),
         //     -32.80472205);
     }

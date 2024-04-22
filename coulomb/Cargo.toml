@@ -7,8 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-approx = "0.5"
-assert_approx_eq = "1.1"
 dyn-clone = "1.0"
 itertools = "0.10"
 nalgebra = "0.32"
@@ -17,7 +15,11 @@ num-integer = "0.1.46"
 physical_constants = "0.5"
 serde = { version = "1.0", features = ["derive"], optional = true }
 
+[dev-dependencies]
+approx = "0.5"
+
 # See https://github.com/victe/rust-latex-doc-minimal-example
-# for including math in the documentation
+# for including math in the documentation:
+# export RUSTDOCFLAGS="--html-in-header coulomb/src/docs-header.html"
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "coulomb/src/docs-header.html"]

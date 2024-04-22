@@ -60,6 +60,7 @@
 //! assert_relative_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 //! ~~~
 
+#[cfg(test)]
 extern crate approx;
 
 /// A point in 3D space
