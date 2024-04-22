@@ -133,19 +133,19 @@ pub trait MultipolePotential: ShortRangeFunction {
     /// The potential from a point dipole is described by the formula:
     /// Phi(mu, r) = (mu dot r) / (|r|^2) * [s(q) - q * s'(q)] * exp(-kr)
     fn dipole_potential(&self, dipole: &Vector3, r: &Vector3) -> f64 {
-        let r_squared = r.norm_squared();
-        if r_squared >= self.cutoff_squared() {
+        let r2 = r.norm_squared();
+        if r2 >= self.cutoff_squared() {
             return 0.0;
         }
-        let r_norm = r.norm();
-        let q = r_norm / self.cutoff();
+        let r1 = r2.sqrt(); // |r|
+        let q = r1 / self.cutoff();
         if let Some(kappa) = self.kappa() {
-            let kr = kappa * r_norm;
-            dipole.dot(r) / (r_squared * r_norm)
+            let kr = kappa * r1;
+            dipole.dot(r) / (r2 * r1)
                 * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
                 * (-kr).exp()
         } else {
-            dipole.dot(r) / (r_squared * r_norm) * self.short_range_f0(q)
+            dipole.dot(r) / (r2 * r1) * self.short_range_f0(q)
         }
     }
 
