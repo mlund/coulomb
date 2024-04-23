@@ -1,5 +1,6 @@
 use crate::pairwise::*;
 use crate::Cutoff;
+use core::fmt::Display;
 
 /// Reaction-field potential
 ///
@@ -10,13 +11,31 @@ use crate::Cutoff;
 /// where
 /// $\epsilon_{out}$ is the relative permittivity of the surrounding medium ("outside" the spherical cutoff), and
 /// $\epsilon_{in}$ is the relative permittivity of the dispersing medium ("inside" the spherical cutoff).
-/// See <https://doi.org/10.1080/00268977300102101>
+/// The optional second term shifts the potential to zero at the cut-off radius.
+/// See <https://doi.org/10.1080/00268977300102101> for more information.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactionField {
     dielec_out: f64, // Relative permittivity outside the cut-off i.e. the surroundings
     dielec_in: f64,  // Relative permittivity inside the cut-off i.e. the dispersing medium
     shift_to_zero: bool, // Shift to zero potential at the cut-off
-    cutoff: f64,     // Cut-off distance
+    cutoff: f64,     // Cut-off radius
+}
+
+impl Display for ReactionField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Reaction field: εᵢ = {:.1}, εₒ = {:.1}, 𝑟✂ = {:.1} Å, {} (https://doi.org/dscmwg)",
+            self.dielec_in,
+            self.dielec_out,
+            self.cutoff,
+            self.shift_to_zero
+                .then_some("shifted")
+                .unwrap_or("unshifted")
+        )
+        .unwrap();
+        Ok(())
+    }
 }
 
 impl MultipolePotential for ReactionField {}
@@ -109,6 +128,10 @@ mod tests {
         assert_relative_eq!(pot.short_range_f2(0.5), 1.472049689, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f3(0.5), 2.944099379, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f0(1.0), 1.490683230, epsilon = 1e-6);
+        assert_eq!(
+            pot.to_string(),
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0 Å, unshifted (https://doi.org/dscmwg)"
+        );
 
         let pot = ReactionField::new_shifted(cutoff, dielec_out, dielec_in);
         assert_relative_eq!(pot.short_range_f0(0.5), 0.3159937888, epsilon = 1e-6);
@@ -116,5 +139,9 @@ mod tests {
         assert_relative_eq!(pot.short_range_f2(0.5), 1.472049689, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f3(0.5), 2.944099379, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = 1e-6);
+        assert_eq!(
+            pot.to_string(),
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0 Å, shifted (https://doi.org/dscmwg)"
+        );
     }
 }
