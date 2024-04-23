@@ -2,6 +2,14 @@
 name = "coulomb"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.77"
+description = "Support library for electrolytes and electrostatic interactions"
+license = "Apache-2.0"
+repository = "https://github.com/mlund/faunus-rs"
+authors = ["Mikael Lund"]
+readme = "README.md"
+categories = ["science"]
+keywords = ["electrolytes", "electrostatics", "molecular simulation", "multipoles", "chemistry"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
