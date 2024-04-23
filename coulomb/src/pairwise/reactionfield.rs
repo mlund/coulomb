@@ -11,7 +11,7 @@ use core::fmt::Display;
 /// where
 /// $\epsilon_{out}$ is the relative permittivity of the surrounding medium ("outside" the spherical cutoff), and
 /// $\epsilon_{in}$ is the relative permittivity of the dispersing medium ("inside" the spherical cutoff).
-/// The optional second term shifts the potential to zero at the cut-off radius.
+/// The optional last term shifts the potential to zero at the cut-off radius.
 /// See <https://doi.org/10.1080/00268977300102101> for more information.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactionField {
@@ -25,7 +25,7 @@ impl Display for ReactionField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Reaction field: εᵢ = {:.1}, εₒ = {:.1}, 𝑟✂ = {:.1} Å, {} (https://doi.org/dscmwg)",
+            "Reaction field: εᵢ = {:.1}, εₒ = {:.1}, 𝑟✂ = {:.1}, {} (https://doi.org/dscmwg)",
             self.dielec_in,
             self.dielec_out,
             self.cutoff,
@@ -130,7 +130,7 @@ mod tests {
         assert_relative_eq!(pot.short_range_f0(1.0), 1.490683230, epsilon = 1e-6);
         assert_eq!(
             pot.to_string(),
-            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0 Å, unshifted (https://doi.org/dscmwg)"
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, unshifted (https://doi.org/dscmwg)"
         );
 
         let pot = ReactionField::new_shifted(cutoff, dielec_out, dielec_in);
@@ -141,7 +141,7 @@ mod tests {
         assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = 1e-6);
         assert_eq!(
             pot.to_string(),
-            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0 Å, shifted (https://doi.org/dscmwg)"
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, shifted (https://doi.org/dscmwg)"
         );
     }
 }
