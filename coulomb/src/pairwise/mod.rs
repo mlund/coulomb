@@ -46,6 +46,9 @@ mod poisson;
 use crate::{Matrix3, Vector3};
 pub use poisson::*;
 
+mod reactionfield;
+pub use reactionfield::ReactionField;
+
 /// Short-range function for electrostatic interaction schemes
 ///
 /// The short-range function, $S(q)$, is a function of the reduced distance $q = r/r_c$,

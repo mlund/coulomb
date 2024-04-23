@@ -1,0 +1,120 @@
+use crate::pairwise::*;
+use crate::Cutoff;
+
+/// Reaction-field potential
+///
+/// The short-range function of the reaction-field potential is given by:
+///
+/// $$ S(q) = 1 + \frac{\epsilon_{out}-\epsilon_{in}}{2\epsilon_{out}+\epsilon_{in}}q^3 - \frac{3\epsilon_{out}}{2\epsilon_{out}+\epsilon_{in}}q $$
+///
+/// where
+/// $\epsilon_{out}$ is the relative permittivity of the surrounding medium ("outside" the spherical cutoff), and
+/// $\epsilon_{in}$ is the relative permittivity of the dispersing medium ("inside" the spherical cutoff).
+/// See <https://doi.org/10.1080/00268977300102101>
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReactionField {
+    dielec_out: f64, // Relative permittivity outside the cut-off i.e. the surroundings
+    dielec_in: f64,  // Relative permittivity inside the cut-off i.e. the dispersing medium
+    shift_to_zero: bool, // Shift to zero potential at the cut-off
+    cutoff: f64,     // Cut-off distance
+}
+
+impl MultipolePotential for ReactionField {}
+impl MultipoleField for ReactionField {}
+impl MultipoleEnergy for ReactionField {}
+impl MultipoleForce for ReactionField {}
+
+impl ReactionField {
+    /// Create a new reaction-field potential
+    ///
+    /// # Arguments
+    /// - `cutoff` - Spherical cut-off distance
+    /// - `dielec_out` - Relative permittivity outside the cut-off i.e. the surroundings
+    /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
+    /// - `shifted` - Shift to zero potential at the cut-off
+    ///
+    pub fn new(cutoff: f64, dielec_out: f64, dielec_in: f64, shift_to_zero: bool) -> Self {
+        Self {
+            dielec_out,
+            dielec_in,
+            shift_to_zero,
+            cutoff,
+        }
+    }
+    pub fn new_unshifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
+        Self::new(cutoff, dielec_out, dielec_in, false)
+    }
+
+    pub fn new_shifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
+        Self::new(cutoff, dielec_out, dielec_in, true)
+    }
+}
+
+impl Cutoff for ReactionField {
+    fn cutoff(&self) -> f64 {
+        self.cutoff
+    }
+    fn cutoff_squared(&self) -> f64 {
+        self.cutoff * self.cutoff
+    }
+}
+
+impl ShortRangeFunction for ReactionField {
+    fn kappa(&self) -> Option<f64> {
+        None
+    }
+    fn prefactor(&self) -> f64 {
+        1.0
+    }
+    fn short_range_f0(&self, q: f64) -> f64 {
+        let f = 1.0
+            + (self.dielec_out - self.dielec_in) * q.powi(3)
+                / (2.0 * self.dielec_out + self.dielec_in);
+        match self.shift_to_zero {
+            true => f - 3.0 * self.dielec_out * q / (2.0 * self.dielec_out + self.dielec_in),
+            false => f,
+        }
+    }
+    fn short_range_f1(&self, q: f64) -> f64 {
+        let f = 3.0 * (self.dielec_out - self.dielec_in) * q.powi(2)
+            / (2.0 * self.dielec_out + self.dielec_in);
+        match self.shift_to_zero {
+            true => f - 3.0 * self.dielec_out / (2.0 * self.dielec_out + self.dielec_in),
+            false => f,
+        }
+    }
+    fn short_range_f2(&self, q: f64) -> f64 {
+        6.0 * (self.dielec_out - self.dielec_in) * q / (2.0 * self.dielec_out + self.dielec_in)
+    }
+    fn short_range_f3(&self, _q: f64) -> f64 {
+        6.0 * (self.dielec_out - self.dielec_in) / (2.0 * self.dielec_out + self.dielec_in)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_reaction_field() {
+        let cutoff = 29.0;
+        let dielec_in = 1.0;
+        let dielec_out = 80.0;
+
+        let pot = ReactionField::new_unshifted(cutoff, dielec_out, dielec_in);
+        assert_relative_eq!(pot.short_range_f0(0.5), 1.061335404, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f1(0.5), 0.3680124224, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f2(0.5), 1.472049689, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f3(0.5), 2.944099379, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f0(1.0), 1.490683230, epsilon = 1e-6);
+
+        let pot = ReactionField::new_shifted(cutoff, dielec_out, dielec_in);
+        assert_relative_eq!(pot.short_range_f0(0.5), 0.3159937888, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f1(0.5), -1.122670807, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f2(0.5), 1.472049689, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f3(0.5), 2.944099379, epsilon = 1e-6);
+        assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = 1e-6);
+    }
+}
