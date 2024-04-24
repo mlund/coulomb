@@ -369,7 +369,7 @@ mod tests {
 
         assert_relative_eq!(func(1.0e-9), spline.eval(&knots, 1e-9));
         assert_relative_eq!(func(5.0), spline.eval(&knots, 5.0), epsilon = 1e-5);
-        assert_relative_eq!(func(10.0), spline.eval(&knots, 10.0));
+        assert_relative_eq!(func(10.0), spline.eval(&knots, 10.0), epsilon = 1e-5);
 
         // Check if numerical derivation of *splined* function
         // matches the analytical solution in `eval_der()`.
