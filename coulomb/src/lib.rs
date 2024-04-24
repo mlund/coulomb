@@ -18,10 +18,11 @@
 //! in _e.g._ molecular systems.
 //! This includes:
 //!
-//! - Setting up a background dielectric medium.
+//! - Background dielectric medium with or without implicit salt.
 //! - Handling of electrolyte solutions with salt of arbitrary valency and ionic strength.
 //! - Calculation of pairwise interactions between ions and point multipoles using
 //!   (truncated) potentials.
+//! - Ewald summation
 //!
 //! ## Interactions between Multipoles
 //!
@@ -208,37 +209,6 @@ pub const ELECTRIC_PREFACTOR: f64 =
 /// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
 /// ```
 pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
-
-/// Defines information about a concept, like a short name, citation, url etc.
-pub trait Info {
-    /// Returns a short name for the concept. Use `_` for spaces and avoid weird characters.
-    /// This is typically used as keywords in user input and output, e.g. in JSON files.
-    fn short_name(&self) -> Option<&'static str> {
-        None
-    }
-    /// Returns a long name for the concept. Spaces are allowed.
-    fn long_name(&self) -> Option<&'static str> {
-        None
-    }
-
-    /// Returns a citation string which should be a
-    /// 1. Digital Object Identifier (DOI) in the format `doi:...` (preferred)
-    /// 2. URL in the format `https://...`
-    fn citation(&self) -> Option<&'static str> {
-        None
-    }
-    /// Tries to extract a URL from the citation string
-    fn url(&self) -> Option<String> {
-        match self.citation() {
-            Some(c) => match c.strip_prefix("doi:") {
-                Some(doi) => Some(format!("https://doi.org/{}", doi)),
-                _ if c.starts_with("https://") || c.starts_with("http://") => Some(c.to_string()),
-                _ => None,
-            },
-            None => None,
-        }
-    }
-}
 
 /// Defines a cutoff distance
 pub trait Cutoff {

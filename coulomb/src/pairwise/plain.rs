@@ -30,6 +30,8 @@ impl MultipoleEnergy for Plain {}
 impl MultipoleForce for Plain {}
 
 /// Scheme for vanilla Coulomb interactions, $S(q)=1$.
+///
+/// See _Premier mémoire sur l’électricité et le magnétisme_ by Charles-Augustin de Coulomb.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Plain {
@@ -48,18 +50,6 @@ impl Plain {
             kappa: debye_length.map(f64::recip),
             prefactor: ELECTRIC_PREFACTOR / permittivity,
         }
-    }
-}
-
-impl crate::Info for Plain {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("coulomb")
-    }
-    fn long_name(&self) -> Option<&'static str> {
-        Some("Coulomb potential")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("Premier mémoire sur l’électricité et le magnétisme by Charles-Augustin de Coulomb")
     }
 }
 

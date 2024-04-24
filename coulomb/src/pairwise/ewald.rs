@@ -62,15 +62,6 @@ impl RealSpaceEwald {
     }
 }
 
-impl crate::Info for RealSpaceEwald {
-    fn citation(&self) -> Option<&'static str> {
-        Some("https://doi.org/fcjts8")
-    }
-    fn short_name(&self) -> Option<&'static str> {
-        Some("ewald")
-    }
-}
-
 impl crate::Cutoff for RealSpaceEwald {
     #[inline]
     fn cutoff(&self) -> f64 {

@@ -83,7 +83,7 @@ pub struct Poisson<const C: i32, const D: i32> {
 }
 
 /// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
-pub type Plain = Poisson<1, -1>;
+pub type _Plain = Poisson<1, -1>;
 /// Energy and force shifted Yukawa potential [Levitt/undamped Fennell](https://doi.org/10/fp959p).
 ///
 /// See also doi:10/bqgmv2.
@@ -155,84 +155,6 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
             yukawa_denom,
             binom_cdc,
         }
-    }
-}
-
-impl crate::Info for Plain {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-plain")
-    }
-}
-
-impl crate::Info for Yukawa {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("force-energy-shifted-yukawa")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/fp959p")
-    }
-}
-
-impl crate::Info for UndampedWolf {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-undamped-wolf")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.478738")
-    }
-}
-
-impl crate::Info for Kale {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-kale")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/csh8bg")
-    }
-}
-
-impl crate::Info for McCann {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-mccann")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1021/ct300961")
-    }
-}
-
-impl crate::Info for UndampedFukuda {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-undamped-fukuda")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.3582791")
-    }
-}
-
-impl crate::Info for Markland {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-markland")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1016/j.cplett.2008.09.019")
-    }
-}
-
-impl crate::Info for Stenqvist {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-stenqvist")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10/c5fr")
-    }
-}
-
-impl crate::Info for Fanourgakis {
-    fn short_name(&self) -> Option<&'static str> {
-        Some("poisson-fanourgakis")
-    }
-    fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1063/1.3216520")
     }
 }
 
