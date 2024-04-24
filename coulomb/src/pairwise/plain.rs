@@ -15,7 +15,6 @@
 use super::{
     MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
 };
-use crate::ELECTRIC_PREFACTOR;
 #[cfg(test)]
 use crate::{Matrix3, Vector3};
 #[cfg(test)]
@@ -39,16 +38,13 @@ pub struct Plain {
     cutoff: f64,
     /// Optional inverse Debye length
     kappa: Option<f64>,
-    /// Prefactor in units of Å x kJ / mol
-    prefactor: f64,
 }
 
 impl Plain {
-    pub fn new(permittivity: f64, cutoff: f64, debye_length: Option<f64>) -> Self {
+    pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
             kappa: debye_length.map(f64::recip),
-            prefactor: ELECTRIC_PREFACTOR / permittivity,
         }
     }
 }
@@ -61,10 +57,6 @@ impl crate::Cutoff for Plain {
 }
 
 impl ShortRangeFunction for Plain {
-    #[inline]
-    fn prefactor(&self) -> f64 {
-        self.prefactor
-    }
     #[inline]
     fn kappa(&self) -> Option<f64> {
         self.kappa
@@ -104,7 +96,7 @@ fn test_coulomb() {
     ); // distance vector for quadrupole check
     let rh = Vector3::new(1.0, 0.0, 0.0); // normalized distance vector
 
-    let pot = Plain::new(80.0, cutoff, None);
+    let pot = Plain::new(cutoff, None);
     let eps = 1e-9;
 
     // Test short-ranged function
@@ -223,7 +215,7 @@ fn test_coulomb() {
     assert_relative_eq!(force[2], -0.002551448858, epsilon = eps);
 
     // Now test with a non-zero kappa
-    let pot = Plain::new(80.0, cutoff, Some(23.0));
+    let pot = Plain::new(cutoff, Some(23.0));
     assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);
     assert_relative_eq!(
         pot.ion_potential(z1, r.norm()),

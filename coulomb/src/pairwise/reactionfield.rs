@@ -29,7 +29,11 @@ impl Display for ReactionField {
             self.dielec_in,
             self.dielec_out,
             self.cutoff,
-            if self.shift_to_zero { "shifted" } else { "unshifted" }
+            if self.shift_to_zero {
+                "shifted"
+            } else {
+                "unshifted"
+            }
         )
         .unwrap();
         Ok(())
@@ -79,9 +83,6 @@ impl Cutoff for ReactionField {
 impl ShortRangeFunction for ReactionField {
     fn kappa(&self) -> Option<f64> {
         None
-    }
-    fn prefactor(&self) -> f64 {
-        1.0
     }
     fn short_range_f0(&self, q: f64) -> f64 {
         let f = 1.0

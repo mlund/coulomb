@@ -70,9 +70,6 @@ impl crate::Cutoff for RealSpaceEwald {
 }
 
 impl ShortRangeFunction for RealSpaceEwald {
-    fn prefactor(&self) -> f64 {
-        1.0
-    }
     /// The inverse Debye length if salt is present, otherwise `None`.
     #[inline]
     fn kappa(&self) -> Option<f64> {

@@ -22,7 +22,7 @@
 //! From this, all multipolar interactions can be derived, e.g. the monopole-monopole energy between two
 //! point charges, $q_1$ and $q_2$:
 //!
-//! $$ u(r) = \frac{q_1 q_2}{4\pi\varepsilon_0\varepsilon_r r} \cdot e^{-\kappa r} \cdot S(q)$$
+//! $$ u(r) \propto \frac{q_1 q_2}{r} \cdot e^{-\kappa r} \cdot S(q)$$
 //!
 //! where $\kappa$ is the inverse Debye screening length.
 //! The generic Coulomb energy is recovered with
@@ -32,9 +32,9 @@
 //! ~~~
 //! # use approx::assert_relative_eq;
 //! use coulomb::pairwise::*;
-//! let (permittivity, cutoff, debye_length) = (80.0, 12.0, None);
-//! let plain = Plain::new(permittivity, cutoff, debye_length);
-//! 
+//! let (cutoff, debye_length) = (12.0, None);
+//! let plain = Plain::new(cutoff, debye_length);
+//!
 //! let (charge, distance) = (1.0, 9.0);
 //! assert_relative_eq!(plain.ion_potential(charge, distance), charge / distance);
 //! ~~~
@@ -64,19 +64,13 @@ pub use reactionfield::ReactionField;
 /// _splitting function_.
 /// There it is used to split the electrostatic interaction into a short-range part and
 /// a long-range part.
-pub trait ShortRangeFunction: crate::Cutoff {
+pub trait ShortRangeFunction {
     /// Inverse Debye screening length.
     ///
     /// The default implementation returns `None`.
     fn kappa(&self) -> Option<f64> {
         None
     }
-    /// Prefactor in LENGTH / CHARGE^2 * ENERGY units
-    ///
-    /// For example if the unit of charge is the elementary charge,
-    /// letting `prefactor()` return the Bjerrum length, the energy
-    /// will be in units of kT.
-    fn prefactor(&self) -> f64;
 
     /// Short-range function, 𝑆(𝑞)
     fn short_range_f0(&self, q: f64) -> f64;
@@ -113,7 +107,7 @@ pub trait ShortRangeFunction: crate::Cutoff {
 }
 
 /// Electric potential from point multipoles
-pub trait MultipolePotential: ShortRangeFunction {
+pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
     #[inline]
     /// Electrostatic potential from a point charge.
     fn ion_potential(&self, charge: f64, distance: f64) -> f64 {
@@ -175,7 +169,7 @@ pub trait MultipolePotential: ShortRangeFunction {
 }
 
 /// # Field due to electric multipoles
-pub trait MultipoleField: ShortRangeFunction {
+pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
     /// Electrostatic field from point charge.
     ///
     /// Parameters:

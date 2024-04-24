@@ -165,9 +165,6 @@ impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
 }
 
 impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
-    fn prefactor(&self) -> f64 {
-        1.0
-    }
     fn kappa(&self) -> Option<f64> {
         None
     }
