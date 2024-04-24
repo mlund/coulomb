@@ -29,9 +29,7 @@ impl Display for ReactionField {
             self.dielec_in,
             self.dielec_out,
             self.cutoff,
-            self.shift_to_zero
-                .then_some("shifted")
-                .unwrap_or("unshifted")
+            if self.shift_to_zero { "shifted" } else { "unshifted" }
         )
         .unwrap();
         Ok(())
