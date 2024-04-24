@@ -26,23 +26,28 @@ impl MultipoleField for RealSpaceEwald {}
 impl MultipoleEnergy for RealSpaceEwald {}
 impl MultipoleForce for RealSpaceEwald {}
 
-/// Scheme for real-space Ewald interactionss
+/// Scheme for real-space Ewald interactions
+///
+/// Further information, see original article by _P.P. Ewald_, <https://doi.org/fcjts8>.
+///
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RealSpaceEwald {
-    /// Real space cutoff distance
+    /// Real space cutoff distance, 𝑟✂︎
     cutoff: f64,
     _alpha: f64,
-    /// alpha * cutoff
+    /// Reduced alpha, 𝜂 = 𝛼 × 𝑟✂︎ (dimensionless)
     eta: f64,
-    /// Inverse Debye screening length (kappa) times cutoff distance (𝜿 × Rc)
+    /// Reduced kappa, 𝜻 = 𝜿 × 𝑟✂︎ (dimensionless)
     zeta: Option<f64>,
 }
 
 impl RealSpaceEwald {
     /// Square root of pi
     const SQRT_PI: f64 = 1.7724538509055159;
-    /// Construct a new Ewald scheme with given cutoff and alpha.
+    /// Construct a new Ewald scheme with given cutoff, alpha, (and debye length).
+    ///
+    /// The Debye length and cutoff should have the same unit of length.
     pub fn new(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
@@ -51,11 +56,15 @@ impl RealSpaceEwald {
             zeta: debye_length.map(|d| cutoff / d),
         }
     }
+    /// Construct a salt-free Ewald scheme with given cutoff and alpha.
+    pub fn new_without_salt(cutoff: f64, alpha: f64) -> Self {
+        Self::new(cutoff, alpha, None)
+    }
 }
 
 impl crate::Info for RealSpaceEwald {
     fn citation(&self) -> Option<&'static str> {
-        Some("doi:10.1002/andp.19213690304")
+        Some("https://doi.org/fcjts8")
     }
     fn short_name(&self) -> Option<&'static str> {
         Some("ewald")

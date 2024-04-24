@@ -19,13 +19,13 @@
 //! The starting point is a _short-range function_, $S(q)$,
 //! of the reduced distance $q = r / r_c$,
 //! where $r$ is the distance between the interacting particles and $r_c$ is the cutoff distance.
-//! From this, all multipolar interactions can be derived, and e.g. the monopole-monopole energy between two
-//! point charges, $q_1$ and $q_2$ is:
+//! From this, all multipolar interactions can be derived, e.g. the monopole-monopole energy between two
+//! point charges, $q_1$ and $q_2$:
 //!
 //! $$ u(r) = \frac{q_1 q_2}{4\pi\varepsilon_0\varepsilon_r r} \cdot e^{-\kappa r} \cdot S(q)$$
 //!
 //! where $\kappa$ is the inverse Debye screening length.
-//! From this, the generic Coulomb energy (See [`Plain`]) is recovered with
+//! The generic Coulomb energy is recovered with
 //! $S(q) = 1$, $r_c = \infty$, and $\kappa = 0$.
 //!
 //! ## Examples
@@ -46,6 +46,9 @@ pub use plain::Plain;
 mod poisson;
 use crate::{Matrix3, Vector3};
 pub use poisson::*;
+
+mod reactionfield;
+pub use reactionfield::ReactionField;
 
 /// Short-range function for electrostatic interaction schemes
 ///

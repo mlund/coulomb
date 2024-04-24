@@ -151,8 +151,6 @@ impl RelativePermittivity for Medium {
 
 impl IonicStrength for Medium {
     fn ionic_strength(&self) -> Option<f64> {
-        self.salt
-            .as_ref()
-            .map(|(salt, molarity)| salt.ionic_strength(*molarity))
+        self.salt.as_ref().map(|salt| salt.0.ionic_strength(salt.1))
     }
 }

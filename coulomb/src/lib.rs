@@ -14,7 +14,7 @@
 
 //! # Electrostatic Interactions and Electrolyte Solutions
 //!
-//! This library provides supoprt for working with electrostatic interactions
+//! This library provides support for working with electrostatic interactions
 //! in _e.g._ molecular systems.
 //! This includes:
 //!
