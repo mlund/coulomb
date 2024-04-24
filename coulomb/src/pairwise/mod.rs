@@ -25,17 +25,18 @@
 //! $$ u(r) = \frac{q_1 q_2}{4\pi\varepsilon_0\varepsilon_r r} \cdot e^{-\kappa r} \cdot S(q)$$
 //!
 //! where $\kappa$ is the inverse Debye screening length.
-//! From this, the generic Coulomb energy is recovered with
+//! From this, the generic Coulomb energy (See [`Plain`]) is recovered with
 //! $S(q) = 1$, $r_c = \infty$, and $\kappa = 0$.
 //!
 //! ## Examples
 //! ~~~
+//! # use approx::assert_relative_eq;
 //! use coulomb::pairwise::*;
-//! let permittivity = 80.0;
-//! let charge = 1.0;
-//! let dist = 9.0;
-//! let plain = Coulomb::new(permittivity, 16.0, None); // cutoff at 16
-//! assert_eq!(plain.ion_potential(charge, dist), charge / dist);
+//! let (permittivity, cutoff, debye_length) = (80.0, 12.0, None);
+//! let plain = Plain::new(permittivity, cutoff, debye_length);
+//! 
+//! let (charge, distance) = (1.0, 9.0);
+//! assert_relative_eq!(plain.ion_potential(charge, distance), charge / distance);
 //! ~~~
 
 mod ewald;
