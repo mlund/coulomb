@@ -334,12 +334,16 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     ///
     /// Returns the interaction energy, UNIT: [(input charge)^2 / (input length)]
     ///
-    /// The interaction energy between an ion and a dipole is described by:
-    ///     u(z, mu, r) = z * Phi(mu, -r)
-    /// where Phi(mu, -r) is the potential from the dipole at the location of the ion.
+    /// The interaction energy between an ion and a dipole is:
+    /// 
+    /// $$u(z, \mu, r) = z * \Phi(\mu, -r)$$
+    /// 
+    /// where $\Phi(\mu, -r)$ is the potential from the dipole at the location of the ion.
     /// This interaction can also be described by:
-    ///     u(z, mu, r) = -mu.dot(E(z, r))
-    /// where E(charge, r) is the field from the ion at the location of the dipole.
+    /// 
+    /// $$u(z, \mu, r) = -\mu.dot(E(z, r))$$
+    /// 
+    /// where $E(z, r)$ is the field from the ion at the location of the dipole.
     fn ion_dipole_energy(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> f64 {
         // Both expressions below give the same answer. Keep for possible optimization in the future.
         // return -dipole_moment.dot(self.ion_field(charge, r)); // field from charge interacting with dipole

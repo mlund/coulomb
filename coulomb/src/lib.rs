@@ -72,8 +72,8 @@
 //! let (z1, z2, r) = (1.0, -1.0, 7.0);      // unit-less charge numbers, separation in angstrom
 //! let medium = Medium::neat_water(298.15); // pure water
 //! let plain = Plain::without_cutoff();     // generic coulomb interaction scheme
-//!
 //! let energy = plain.ion_ion_energy(z1, z2, r) * TO_CHEMISTRY_UNIT / medium.permittivity();
+//!
 //! assert_relative_eq!(energy, -2.533055636224861); // in kJ/mol
 //! ~~~
 
