@@ -107,6 +107,8 @@ pub trait ShortRangeFunction {
 }
 
 /// Electric potential from point multipoles
+///
+/// The units of the returned potentials is [ ( input charge ) / ( input length ) ]
 pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
     #[inline]
     /// Electrostatic potential from a point charge.
@@ -458,7 +460,7 @@ mod tests {
         let bjerrum_length = 7.1; // angstrom
         let rel_dielectric_const = 80.0;
         assert_relative_eq!(
-            crate::ELECTRIC_PREFACTOR / rel_dielectric_const / bjerrum_length,
+            crate::TO_CHEMISTRY_UNIT / rel_dielectric_const / bjerrum_length,
             2.4460467895137676 // In kJ/mol, roughly 1 KT at room temperature
         );
     }

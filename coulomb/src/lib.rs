@@ -150,12 +150,12 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
 /// let lB = bjerrum_length(293.0, 80.0); // angstroms
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~
-pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
+pub fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
     const ANGSTROM_PER_METER: f64 = 1e10;
     ELEMENTARY_CHARGE.powi(2) * ANGSTROM_PER_METER
         / (4.0
             * PI
-            * relative_dielectric_const
+            * relative_permittivity
             * VACUUM_ELECTRIC_PERMITTIVITY
             * BOLTZMANN_CONSTANT
             * kelvin)
@@ -170,10 +170,10 @@ pub fn bjerrum_length(kelvin: f64, relative_dielectric_const: f64) -> f64 {
 /// let lambda = debye_length(293.0, 80.0, molarity); // angstroms
 /// assert_eq!(lambda, 17.576538097378368);
 /// ~~~
-pub fn debye_length(kelvin: f64, relative_dielectric_const: f64, ionic_strength: f64) -> f64 {
+pub fn debye_length(kelvin: f64, relative_permittivity: f64, ionic_strength: f64) -> f64 {
     const LITER_PER_ANGSTROM3: f64 = 1e-27;
     (8.0 * PI
-        * bjerrum_length(kelvin, relative_dielectric_const)
+        * bjerrum_length(kelvin, relative_permittivity)
         * ionic_strength
         * AVOGADRO_CONSTANT
         * LITER_PER_ANGSTROM3)
@@ -181,22 +181,30 @@ pub fn debye_length(kelvin: f64, relative_dielectric_const: f64, ionic_strength:
         .recip()
 }
 
-/// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA (Å × kJ / mol).
+/// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA [Å × kJ / mol].
 ///
-/// Can be used to calculate e.g. the interaction energy bewteen two
-/// point charges in kJ/mol:
+/// Use to scale potential, energy, forces, fields from the [`pairwise`] module to units commonly used in chemistry;
+/// `kJ`, `mol`, `Å`, and `elementary charge`.
+/// Note that this uses a vacuum permittivity and the final result should be divided by the relative dielectric constant for the
+/// actual medium.
+/// If input length and charges are in units of angstrom and elementary charge:
 ///
-/// Examples:
+/// - `CHEMISTRY_UNIT` × _energy_ ➔ kJ/mol
+/// - `CHEMISTRY_UNIT` × _force_ ➔ kJ/mol/Å
+/// - `CHEMISTRY_UNIT` × _potential_ ➔ kJ/mol×e
+/// - `CHEMISTRY_UNIT` × _field_ ➔ kJ/mol/Å×e
+///
+/// # Examples:
 /// ```
-/// use coulomb::ELECTRIC_PREFACTOR;
-/// let z1 = 1.0;                    // unit-less charge number
-/// let z2 = -1.0;                   // unit-less charge number
-/// let r = 7.0;                     // separation in angstrom
-/// let rel_dielectric_const = 80.0; // relative dielectric constant
-/// let energy = ELECTRIC_PREFACTOR * z1 * z2 / (rel_dielectric_const * r);
-/// assert_eq!(energy, -2.48099031507825); // in kJ/mol
+/// # use approx::assert_relative_eq;
+/// use coulomb::TO_CHEMISTRY_UNIT;
+/// let (z1, z2, r) = (1.0, -1.0, 7.0); // unit-less charge number, separation in angstrom
+/// let rel_permittivity = 80.0;
+/// let energy = TO_CHEMISTRY_UNIT / rel_permittivity * z1 * z2 / r;
+/// assert_relative_eq!(energy, -2.48099031507825); // in kJ/mol
+/// ```
 ///
-pub const ELECTRIC_PREFACTOR: f64 =
+pub const TO_CHEMISTRY_UNIT: f64 =
     ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * 1.0e10 * AVOGADRO_CONSTANT * 1e-3
         / (4.0 * PI * VACUUM_ELECTRIC_PERMITTIVITY);
 
@@ -205,10 +213,10 @@ pub const ELECTRIC_PREFACTOR: f64 =
 /// Examples:
 /// ```
 /// use coulomb::BJERRUM_LEN_VACUUM_298K;
-/// let relative_dielectric_const = 80.0;
-/// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_dielectric_const, 7.0057415269733);
+/// let relative_permittivity = 80.0;
+/// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_permittivity, 7.0057415269733);
 /// ```
-pub const BJERRUM_LEN_VACUUM_298K: f64 = ELECTRIC_PREFACTOR / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
+pub const BJERRUM_LEN_VACUUM_298K: f64 = TO_CHEMISTRY_UNIT / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
 
 /// Defines a cutoff distance
 pub trait Cutoff {
