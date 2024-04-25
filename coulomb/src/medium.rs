@@ -19,7 +19,7 @@ use core::fmt::{Display, Formatter};
 /// ~~~
 /// use coulomb::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
 /// let medium = Medium::neat_water(298.15);
-/// assert_eq!(medium.permittivity().unwrap(), 78.35565171480539);
+/// assert_eq!(medium.permittivity(), 78.35565171480539);
 /// assert!(medium.ionic_strength().is_none());
 /// assert!(medium.debye_length().is_none());
 /// ~~~
@@ -98,8 +98,8 @@ impl Medium {
     }
 
     /// Get relative permittivity of the medium at the current temperature
-    pub fn permittivity(&self) -> Result<f64> {
-        self.permittivity.permittivity(self.temperature)
+    pub fn permittivity(&self) -> f64 {
+        self.permittivity.permittivity(self.temperature).unwrap()
     }
 }
 

@@ -46,7 +46,7 @@
 //! # use approx::assert_relative_eq;
 //! use coulomb::*;
 //! let medium = Medium::neat_water(298.15);
-//! assert_relative_eq!(medium.permittivity().unwrap(), 78.35565171480539);
+//! assert_relative_eq!(medium.permittivity(), 78.35565171480539);
 //! assert!(medium.ionic_strength().is_none());
 //! assert!(medium.debye_length().is_none());
 //! ~~~
@@ -59,6 +59,22 @@
 //! let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
 //! assert_relative_eq!(medium.ionic_strength().unwrap(), 0.3);
 //! assert_relative_eq!(medium.debye_length().unwrap(), 5.548902662386284);
+//! ~~~
+//!
+//! The [`pairwise`] module can be used to calculate the interaction energy (and forces, field) between
+//! point multipoles in the medium. Here's a simple example for the energy between two point
+//! charges:
+//! ~~~
+//! # use approx::assert_relative_eq;
+//! use coulomb::{Medium, TO_CHEMISTRY_UNIT};
+//! use coulomb::pairwise::{Plain, MultipoleEnergy};
+//!
+//! let (z1, z2, r) = (1.0, -1.0, 7.0);      // unit-less charge numbers, separation in angstrom
+//! let medium = Medium::neat_water(298.15); // pure water
+//! let plain = Plain::without_cutoff();     // generic coulomb interaction scheme
+//!
+//! let energy = plain.ion_ion_energy(z1, z2, r) * TO_CHEMISTRY_UNIT / medium.permittivity();
+//! assert_relative_eq!(energy, -2.533055636224861); // in kJ/mol
 //! ~~~
 
 #[cfg(test)]

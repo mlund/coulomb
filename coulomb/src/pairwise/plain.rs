@@ -41,6 +41,9 @@ pub struct Plain {
 }
 
 impl Plain {
+    pub fn without_cutoff() -> Self {
+        Self::new(f64::INFINITY, None)
+    }
     pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
