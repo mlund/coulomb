@@ -24,26 +24,7 @@ use serde::{Deserialize, Serialize};
 impl MultipolePotential for RealSpaceEwald {}
 impl MultipoleField for RealSpaceEwald {}
 impl MultipoleForce for RealSpaceEwald {}
-
-impl MultipoleEnergy for RealSpaceEwald {
-    fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
-        // todo: unwrap once
-        let monopole = Some(
-            -self.eta / Self::SQRT_PI
-                * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
-                    - Self::SQRT_PI * self.zeta.unwrap_or(0.0) / (2.0 * self.eta)
-                        * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))),
-        );
-        let dipole = Some(
-            -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0
-                * (Self::SQRT_PI * self.zeta.unwrap_or(0.0).powi(3) / 4.0 / self.eta.powi(3)
-                    * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))
-                    + (1.0 - self.zeta.unwrap_or(0.0).powi(2) / 2.0 / self.eta.powi(2))
-                        * f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))),
-        );
-        super::SelfEnergyPrefactors { monopole, dipole }
-    }
-}
+impl MultipoleEnergy for RealSpaceEwald {}
 
 /// Scheme for real-space Ewald interactions
 ///
@@ -152,6 +133,24 @@ impl ShortRangeFunction for RealSpaceEwald {
                     * f64::exp(-(self.eta * q).powi(2))
             }
         }
+    }
+    
+    fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
+        // todo: unwrap once
+        let monopole = Some(
+            -self.eta / Self::SQRT_PI
+                * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
+                    - Self::SQRT_PI * self.zeta.unwrap_or(0.0) / (2.0 * self.eta)
+                        * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))),
+        );
+        let dipole = Some(
+            -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0
+                * (Self::SQRT_PI * self.zeta.unwrap_or(0.0).powi(3) / 4.0 / self.eta.powi(3)
+                    * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))
+                    + (1.0 - self.zeta.unwrap_or(0.0).powi(2) / 2.0 / self.eta.powi(2))
+                        * f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))),
+        );
+        super::SelfEnergyPrefactors { monopole, dipole }
     }
 }
 

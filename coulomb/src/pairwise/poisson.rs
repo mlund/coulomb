@@ -23,19 +23,7 @@ use serde::{Deserialize, Serialize};
 impl<const C: i32, const D: i32> MultipolePotential for Poisson<C, D> {}
 impl<const C: i32, const D: i32> MultipoleField for Poisson<C, D> {}
 impl<const C: i32, const D: i32> MultipoleForce for Poisson<C, D> {}
-
-impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {
-    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
-        let mut c1: f64 = -0.5 * (C + D) as f64 / C as f64;
-        if self.use_yukawa_screening {
-            c1 = c1 * -2.0 * self.reduced_kappa * self.yukawa_denom;
-        }
-        SelfEnergyPrefactors {
-            monopole: Some(c1),
-            dipole: None,
-        }
-    }
-}
+impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 
 /// # Scheme for the Poisson short-range function
 ///
@@ -307,6 +295,27 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             * qp.powi(C - 2)
             * ((2.0 - C as f64 - D as f64) * qp + C as f64 - 1.0);
         d3sdqp3 * dqpdq * dqpdq * dqpdq + 3.0 * d2sdqp2 * dqpdq * d2qpdq2 + dsdqp * d3qpdq3
+    }
+
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        let mut c1: f64 = -0.5 * (C + D) as f64 / C as f64;
+        if self.use_yukawa_screening {
+            c1 = c1 * -2.0 * self.reduced_kappa * self.yukawa_denom;
+        }
+        SelfEnergyPrefactors {
+            monopole: Some(c1),
+            dipole: None,
+        }
+    }
+}
+
+impl<const C: i32, const D: i32> core::fmt::Display for Poisson<C, D> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Poisson: C = {}, D = {}, 𝑟✂ = {:.1}", C, D, self.cutoff)?;
+        if let Some(debye_length) = self.kappa().map(f64::recip) {
+            write!(f, ", λᴰ = {:.1} Å", debye_length)?;
+        }
+        Ok(())
     }
 }
 

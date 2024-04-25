@@ -57,21 +57,7 @@ impl Display for ReactionField {
 impl MultipolePotential for ReactionField {}
 impl MultipoleField for ReactionField {}
 impl MultipoleForce for ReactionField {}
-
-impl MultipoleEnergy for ReactionField {
-    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
-        let monopole = if self.shift_to_zero {
-            Some(-3.0 * self.dielec_out / (4.0 * self.dielec_out + 2.0 * self.dielec_in))
-        } else {
-            None
-        };
-        let dipole = Some(
-            -(2.0 * self.dielec_out - 2.0 * self.dielec_in)
-                / (2.0 * (2.0 * self.dielec_out + self.dielec_in)),
-        );
-        SelfEnergyPrefactors { monopole, dipole }
-    }
-}
+impl MultipoleEnergy for ReactionField {}
 
 impl ReactionField {
     /// Create a new reaction-field potential
@@ -135,6 +121,20 @@ impl ShortRangeFunction for ReactionField {
     fn short_range_f3(&self, _q: f64) -> f64 {
         6.0 * (self.dielec_out - self.dielec_in) / (2.0 * self.dielec_out + self.dielec_in)
     }
+
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        let monopole = if self.shift_to_zero {
+            Some(-3.0 * self.dielec_out / (4.0 * self.dielec_out + 2.0 * self.dielec_in))
+        } else {
+            None
+        };
+        let dipole = Some(
+            -(2.0 * self.dielec_out - 2.0 * self.dielec_in)
+                / (2.0 * (2.0 * self.dielec_out + self.dielec_in)),
+        );
+        SelfEnergyPrefactors { monopole, dipole }
+    }
+
 }
 
 #[cfg(test)]

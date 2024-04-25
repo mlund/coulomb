@@ -104,6 +104,19 @@ pub trait ShortRangeFunction {
         const EPS: f64 = 1e-6;
         (self.short_range_f2(q + EPS) - self.short_range_f2(q - EPS)) / (2.0 * EPS)
     }
+
+    /// Prefactors for the self-energy of monopoles and dipoles.
+    ///
+    /// If a prefactor is `None` the self-energy is not calculated. Self-energies
+    /// are normally important only when inserting or deleting particles
+    /// in a system.
+    /// One example is in simulations of the Grand Canonical ensemble.
+    /// The default implementation returns a `SelfEnergyPrefactors` with
+    /// all prefactors set to `None`.
+    ///
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        SelfEnergyPrefactors::default()
+    }
 }
 
 /// Electric potential from point multipoles
@@ -272,6 +285,12 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
     }
 }
 
+/// Prefactors for calculating the self-energy of monopoles and dipoles
+///
+/// Some short-range functions warrent a self-energy on multipoles. This
+/// is important for systems where the number of particles fluctuates, e.g.
+/// in the Grand Canonical ensemble. By default the self-energy is not calculated
+/// unless prefactors are set.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SelfEnergyPrefactors {
     /// Prefactor for the self-energy of monopoles, _c1_.
@@ -282,15 +301,6 @@ pub struct SelfEnergyPrefactors {
 
 /// # Interaction energy between multipoles
 pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
-    /// Prefactors for the self-energy of monopoles and dipoles.
-    ///
-    /// If a prefactor is `None` the self-energy is not calculated. Self-energies
-    /// are normally important only when inserting or deleting particles
-    /// in a system.
-    /// One example is in simulations of the Grand Canonical ensemble.
-    ///
-    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors;
-
     /// Self-energy of monopoles and dipoles
     ///
     /// The self-energy is described by:
@@ -299,7 +309,6 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     ///
     /// where $c_1$ and $c_2$ are constants specific for the interaction scheme.
     ///
-    #[allow(unused_variables)]
     fn self_energy(&self, monopoles: &[f64], dipoles: &[f64]) -> f64 {
         let mut sum: f64 = 0.0;
         let prefactor = self.self_energy_prefactors();
@@ -335,14 +344,14 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// Returns the interaction energy, UNIT: [(input charge)^2 / (input length)]
     ///
     /// The interaction energy between an ion and a dipole is:
-    /// 
+    ///
     /// $$u(z, \mu, r) = z * \Phi(\mu, -r)$$
-    /// 
+    ///
     /// where $\Phi(\mu, -r)$ is the potential from the dipole at the location of the ion.
     /// This interaction can also be described by:
-    /// 
+    ///
     /// $$u(z, \mu, r) = -\mu.dot(E(z, r))$$
-    /// 
+    ///
     /// where $E(z, r)$ is the field from the ion at the location of the dipole.
     fn ion_dipole_energy(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> f64 {
         // Both expressions below give the same answer. Keep for possible optimization in the future.
