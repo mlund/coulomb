@@ -70,6 +70,8 @@ impl crate::Cutoff for RealSpaceEwald {
 }
 
 impl ShortRangeFunction for RealSpaceEwald {
+    const URL: &'static str = "https://doi.org/fcjts8";
+
     /// The inverse Debye length if salt is present, otherwise `None`.
     #[inline]
     fn kappa(&self) -> Option<f64> {
@@ -134,7 +136,7 @@ impl ShortRangeFunction for RealSpaceEwald {
             }
         }
     }
-    
+
     fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
         // todo: unwrap once
         let monopole = Some(

@@ -95,6 +95,8 @@ impl Cutoff for ReactionField {
 }
 
 impl ShortRangeFunction for ReactionField {
+    const URL: &'static str = "https://doi.org/10.1080/00268977300102101";
+
     fn kappa(&self) -> Option<f64> {
         None
     }
@@ -134,7 +136,6 @@ impl ShortRangeFunction for ReactionField {
         );
         SelfEnergyPrefactors { monopole, dipole }
     }
-
 }
 
 #[cfg(test)]

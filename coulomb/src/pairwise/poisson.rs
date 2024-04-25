@@ -85,6 +85,7 @@ pub struct Poisson<const C: i32, const D: i32> {
 
 /// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
 pub type _Plain = Poisson<1, -1>;
+
 /// Energy and force shifted Yukawa potential [Levitt/undamped Fennell](https://doi.org/10/fp959p).
 ///
 /// See also doi:10/bqgmv2.
@@ -166,6 +167,19 @@ impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
 }
 
 impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
+    const URL: &'static str = match (C, D) {
+        (1, -1) => "https://doi.org/msxd",             // plain
+        (1, 0) => "https://doi.org/10.1063/1.478738",  // wolf
+        (1, 1) => "https://doi.org/10/fp959p",         // fennell
+        (1, 2) => "https://doi.org/10/csh8bg",         // kale
+        (1, 3) => "https://doi.org/10.1021/ct300961",  // mccann
+        (2, 1) => "https://doi.org/10.1063/1.3582791", // fukuda
+        (2, 2) => "https://doi.org/dbpbts",            // markland
+        (3, 3) => "https://doi.org/10/c5fr",           // stenqvist
+        (4, 3) => "https://doi.org/10.1063/1.3216520", // fanourgakis
+        _ => "https://doi.org/c5fr",                   // poisson
+    };
+
     fn kappa(&self) -> Option<f64> {
         None
     }

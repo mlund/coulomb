@@ -65,6 +65,9 @@ pub use reactionfield::ReactionField;
 /// There it is used to split the electrostatic interaction into a short-range part and
 /// a long-range part.
 pub trait ShortRangeFunction {
+    /// URL to the original article describing the short-range function.
+    const URL: &'static str;
+
     /// Inverse Debye screening length.
     ///
     /// The default implementation returns `None`.

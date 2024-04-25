@@ -30,7 +30,8 @@ impl MultipoleEnergy for Plain {}
 
 /// Scheme for vanilla Coulomb interactions, $S(q)=1$.
 ///
-/// See _Premier mémoire sur l’électricité et le magnétisme_ by Charles-Augustin de Coulomb.
+/// See _Premier mémoire sur l’électricité et le magnétisme_ by Charles-Augustin de Coulomb,
+/// <https://doi.org/msxd>.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Plain {
@@ -60,6 +61,8 @@ impl crate::Cutoff for Plain {
 }
 
 impl ShortRangeFunction for Plain {
+    const URL: &'static str = "https://doi.org/msxd";
+
     #[inline]
     fn kappa(&self) -> Option<f64> {
         self.kappa
