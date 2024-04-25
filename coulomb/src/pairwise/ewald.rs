@@ -42,6 +42,21 @@ pub struct RealSpaceEwald {
     zeta: Option<f64>,
 }
 
+impl core::fmt::Display for RealSpaceEwald {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "Real-space Ewald: 𝑟✂ = {:.1}, 𝜂 = {:.1}",
+            self.cutoff, self.eta,
+        )?;
+        if let Some(zeta) = self.zeta {
+            write!(f, ", 𝜻 = {:.1}", zeta)?;
+        }
+        write!(f, " <{}>", Self::URL)?;
+        Ok(())
+    }
+}
+
 impl RealSpaceEwald {
     /// Square root of pi
     const SQRT_PI: f64 = 1.7724538509055159;
@@ -200,4 +215,9 @@ fn test_ewald() {
     assert_relative_eq!(pot.short_range_f1(0.5), -0.6344413331247332, epsilon = eps);
     assert_relative_eq!(pot.short_range_f2(0.5), 4.42313324197739, epsilon = eps);
     assert_relative_eq!(pot.short_range_f3(0.5), -19.859372613319028, epsilon = eps);
+
+    assert_eq!(
+        pot.to_string(),
+        "Real-space Ewald: 𝑟✂ = 29.0, 𝜂 = 2.9, 𝜻 = 1.3 <https://doi.org/fcjts8>"
+    );
 }

@@ -69,7 +69,7 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Poisson<const C: i32, const D: i32> {
     cutoff: f64,
-    _debye_length: f64,
+    debye_length: f64,
     _has_dipolar_selfenergy: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     reduced_kappa: f64,
@@ -149,7 +149,7 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         Poisson {
             cutoff,
-            _debye_length: debye_length.unwrap_or(f64::INFINITY),
+            debye_length: debye_length.unwrap_or(f64::INFINITY),
             _has_dipolar_selfenergy: has_dipolar_selfenergy,
             reduced_kappa,
             use_yukawa_screening,
@@ -181,7 +181,11 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
     };
 
     fn kappa(&self) -> Option<f64> {
-        None
+        if self.debye_length.is_normal() {
+            Some(1.0 / self.debye_length)
+        } else {
+            None
+        }
     }
     fn short_range_f0(&self, q: f64) -> f64 {
         if D == -C {
@@ -325,10 +329,15 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
 
 impl<const C: i32, const D: i32> core::fmt::Display for Poisson<C, D> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Poisson: C = {}, D = {}, 𝑟✂ = {:.1}", C, D, self.cutoff)?;
+        write!(
+            f,
+            "Poisson: 𝐶 = {}, 𝐷 = {}, 𝑟✂ = {:.1} Å",
+            C, D, self.cutoff
+        )?;
         if let Some(debye_length) = self.kappa().map(f64::recip) {
             write!(f, ", λᴰ = {:.1} Å", debye_length)?;
         }
+        write!(f, " <{}>", Self::URL)?;
         Ok(())
     }
 }
@@ -358,6 +367,11 @@ fn test_poisson() {
         pot.self_energy(&vec![2.0], &vec![0.0]),
         -0.03037721287,
         epsilon = eps
+    );
+
+    assert_eq!(
+        pot.to_string(),
+        "Poisson: 𝐶 = 3, 𝐷 = 3, 𝑟✂ = 29.0 Å, λᴰ = 23.0 Å <https://doi.org/10/c5fr>"
     );
 
     // Test Fanougarkis short-range function
