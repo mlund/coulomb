@@ -24,14 +24,10 @@ use serde::{Deserialize, Serialize};
 impl MultipolePotential for RealSpaceEwald {}
 impl MultipoleField for RealSpaceEwald {}
 impl MultipoleForce for RealSpaceEwald {}
+
 impl MultipoleEnergy for RealSpaceEwald {
     fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
-        // setSelfEnergyPrefactor(
-        //     {-eta / pi_sqrt *
-        //          (std::exp(-zeta2 / 4.0 / eta2) - pi_sqrt * zeta / (2.0 * eta) * std::erfc(zeta / (2.0 * eta))),
-        //      -eta3 / pi_sqrt * 2.0 / 3.0 *
-        //          (pi_sqrt * zeta3 / 4.0 / eta3 * std::erfc(zeta / (2.0 * eta)) +
-        //           (1.0 - zeta2 / 2.0 / eta2) * std::exp(-zeta2 / 4.0 / eta2))}); // ion-quadrupole self-energy term: XYZ
+        // todo: unwrap once
         let monopole = Some(
             -self.eta / Self::SQRT_PI
                 * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
@@ -166,12 +162,12 @@ fn test_ewald() {
     let eps = 1e-8;
 
     assert_relative_eq!(
-        pot.self_energy(&vec![4.0], &vec![0.0]),
+        pot.self_energy(&vec![2.0], &vec![0.0]),
         -0.2256758334,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.self_energy(&vec![0.0], &vec![2.0]),
+        pot.self_energy(&vec![0.0], &vec![f64::sqrt(2.0)]),
         -0.000752257778,
         epsilon = eps
     );
@@ -188,12 +184,12 @@ fn test_ewald() {
     // CHECK(pot.self_energy({4.0, 0.0}) == Approx(-0.1493013040));
     // CHECK(pot.self_energy({0.0, 2.0}) == Approx(-0.0006704901976));
     assert_relative_eq!(
-        pot.self_energy(&vec![4.0], &vec![0.0]),
+        pot.self_energy(&vec![2.0], &vec![0.0]),
         -0.14930129209178544,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.self_energy(&vec![0.0], &vec![2.0]),
+        pot.self_energy(&vec![0.0], &vec![f64::sqrt(2.0)]),
         -0.0006704901976,
         epsilon = eps
     );

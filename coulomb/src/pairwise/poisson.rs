@@ -332,7 +332,7 @@ fn test_poisson() {
 
     let pot = Stenqvist::new(29.0, Some(23.0));
     approx::assert_relative_eq!(
-        pot.self_energy(&vec![4.0], &vec![0.0]),
+        pot.self_energy(&vec![2.0], &vec![0.0]),
         -0.03037721287,
         epsilon = eps
     );

@@ -274,15 +274,24 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SelfEnergyPrefactors {
+    /// Prefactor for the self-energy of monopoles, _c1_.
     monopole: Option<f64>,
+    /// Prefactor for the self-energy of dipoles, _c2_.
     dipole: Option<f64>,
 }
 
 /// # Interaction energy between multipoles
 pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
+    /// Prefactors for the self-energy of monopoles and dipoles.
+    ///
+    /// If a prefactor is `None` the self-energy is not calculated. Self-energies
+    /// are normally important only when inserting or deleting particles
+    /// in a system.
+    /// One example is in simulations of the Grand Canonical ensemble.
+    ///
     fn self_energy_prefactors(&self) -> SelfEnergyPrefactors;
 
-    /// Self-energy of monopole and dipoles
+    /// Self-energy of monopoles and dipoles
     ///
     /// The self-energy is described by:
     ///
@@ -291,14 +300,14 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// where $c_1$ and $c_2$ are constants specific for the interaction scheme.
     ///
     #[allow(unused_variables)]
-    fn self_energy(&self, monopole_squared: &[f64], dipole_squared: &[f64]) -> f64 {
+    fn self_energy(&self, monopoles: &[f64], dipoles: &[f64]) -> f64 {
         let mut sum: f64 = 0.0;
         let prefactor = self.self_energy_prefactors();
         if let Some(c1) = prefactor.monopole {
-            sum += c1 * monopole_squared.iter().sum::<f64>() / self.cutoff();
+            sum += c1 * monopoles.iter().map(|z| z * z).sum::<f64>() / self.cutoff();
         }
         if let Some(c2) = prefactor.dipole {
-            sum += c2 * dipole_squared.iter().sum::<f64>() / self.cutoff().powi(3);
+            sum += c2 * dipoles.iter().map(|mu| mu * mu).sum::<f64>() / self.cutoff().powi(3);
         }
         sum
     }

@@ -151,9 +151,9 @@ mod tests {
 
         let pot = ReactionField::new_unshifted(cutoff, dielec_out, dielec_in);
 
-        assert_relative_eq!(pot.self_energy(&vec![4.0], &vec![0.0]), 0.0, epsilon = 1e-6);
+        assert_relative_eq!(pot.self_energy(&vec![2.0], &vec![0.0]), 0.0, epsilon = 1e-6);
         assert_relative_eq!(
-            pot.self_energy(&vec![0.0], &vec![2.0]),
+            pot.self_energy(&vec![0.0], &vec![f64::sqrt(2.0)]),
             -0.00004023807698,
             epsilon = 1e-9
         );
