@@ -23,10 +23,10 @@ use core::fmt::Display;
 /// $$ S(q) = 1 + \frac{\epsilon_{out}-\epsilon_{in}}{2\epsilon_{out}+\epsilon_{in}}q^3 - \frac{3\epsilon_{out}}{2\epsilon_{out}+\epsilon_{in}}q $$
 ///
 /// where
-/// $\epsilon_{out}$ is the relative permittivity of the surrounding medium ("outside" the spherical cutoff), and
-/// $\epsilon_{in}$ is the relative permittivity of the dispersing medium ("inside" the spherical cutoff).
+/// $\epsilon_{out}$ is the relative permittivity of the surrounding medium, _i.e._ "outside" the spherical cutoff.
+/// $\epsilon_{in}$ is the relative permittivity of the dispersing medium, _ i.e._ inside the spherical cutoff.
 /// The optional last term shifts the potential to zero at the cut-off radius.
-/// See <https://doi.org/10.1080/00268977300102101> for more information.
+/// See <https://doi.org/dscmwg> for more information.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactionField {
     dielec_out: f64, // Relative permittivity outside the cut-off i.e. the surroundings
@@ -39,7 +39,7 @@ impl Display for ReactionField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Reaction field: εᵢ = {:.1}, εₒ = {:.1}, 𝑟✂ = {:.1}, {} (https://doi.org/dscmwg)",
+            "Reaction field: εᵢ = {:.1}, εₒ = {:.1}, 𝑟✂ = {:.1}, {} <{}>",
             self.dielec_in,
             self.dielec_out,
             self.cutoff,
@@ -47,9 +47,9 @@ impl Display for ReactionField {
                 "shifted"
             } else {
                 "unshifted"
-            }
-        )
-        .unwrap();
+            },
+            Self::URL
+        )?;
         Ok(())
     }
 }
@@ -76,10 +76,13 @@ impl ReactionField {
             cutoff,
         }
     }
+
+    /// Create unshifted reaction-field potential
     pub fn new_unshifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, false)
     }
 
+    /// Create shifted reaction-field potential
     pub fn new_shifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, true)
     }
@@ -95,7 +98,7 @@ impl Cutoff for ReactionField {
 }
 
 impl ShortRangeFunction for ReactionField {
-    const URL: &'static str = "https://doi.org/10.1080/00268977300102101";
+    const URL: &'static str = "https://doi.org/dscmwg";
 
     fn kappa(&self) -> Option<f64> {
         None
@@ -166,7 +169,7 @@ mod tests {
         assert_relative_eq!(pot.short_range_f0(1.0), 1.490683230, epsilon = 1e-6);
         assert_eq!(
             pot.to_string(),
-            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, unshifted (https://doi.org/dscmwg)"
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, unshifted <https://doi.org/dscmwg>"
         );
 
         let pot = ReactionField::new_shifted(cutoff, dielec_out, dielec_in);
@@ -177,7 +180,7 @@ mod tests {
         assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = 1e-6);
         assert_eq!(
             pot.to_string(),
-            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, shifted (https://doi.org/dscmwg)"
+            "Reaction field: εᵢ = 1.0, εₒ = 80.0, 𝑟✂ = 29.0, shifted <https://doi.org/dscmwg>"
         );
     }
 }

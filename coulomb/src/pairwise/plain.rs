@@ -41,6 +41,17 @@ pub struct Plain {
     kappa: Option<f64>,
 }
 
+impl core::fmt::Display for Plain {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Plain Coulomb: 𝑟✂ = {:.1} Å", self.cutoff)?;
+        if let Some(debye_length) = self.kappa.map(f64::recip) {
+            write!(f, ", λᴰ = {:.1} Å", debye_length)?;
+        }
+        write!(f, " <{}>", Self::URL)?;
+        Ok(())
+    }
+}
+
 impl Plain {
     pub fn without_cutoff() -> Self {
         Self::new(f64::INFINITY, None)
@@ -104,6 +115,11 @@ fn test_coulomb() {
 
     let pot = Plain::new(cutoff, None);
     let eps = 1e-9;
+
+    assert_eq!(
+        pot.to_string(),
+        "Plain Coulomb: 𝑟✂ = 29.0 Å <https://doi.org/msxd>"
+    );
 
     // Test short-ranged function
     assert_eq!(pot.short_range_f0(0.5), 1.0);
@@ -222,6 +238,12 @@ fn test_coulomb() {
 
     // Now test with a non-zero kappa
     let pot = Plain::new(cutoff, Some(23.0));
+
+    assert_eq!(
+        pot.to_string(),
+        "Plain Coulomb: 𝑟✂ = 29.0 Å, λᴰ = 23.0 Å <https://doi.org/msxd>"
+    );
+
     assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);
     assert_relative_eq!(
         pot.ion_potential(z1, r.norm()),
