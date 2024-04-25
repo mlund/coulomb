@@ -29,8 +29,7 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 ///
 /// This is a general scheme for the short-ranged part of the electrostatic interaction
 /// which can be used to arbitrarily cancel derivatives at the origin and at the cut-off.
-/// From the Conclusion of
-/// [doi:10.1088/1367-2630/ab1ec1](http://dx.doi.org/10.1088/1367-2630/ab1ec1):
+/// From the Conclusion of <https://doi.org/c5fr>:
 ///
 /// _"We have presented truncated pair-potentials for electrostatic interactions which as
 /// closely as possible solves the Poisson equation. Starting from the Poisson equation,
@@ -60,9 +59,6 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 /// | `markland`    | 2   | 2   | Scheme for [Markland](https://doi.org/10.1016/j.cplett.2008.09.019)
 /// | `stenqvist`   | 3   | 3   | Scheme for [Stenqvist](https://doi.org/10/c5fr)
 /// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520),
-///
-/// More info:
-/// - <http://dx.doi.org/10.1088/1367-2630/ab1ec1>
 ///
 
 #[derive(Clone, Debug)]
@@ -177,7 +173,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         (2, 2) => "https://doi.org/dbpbts",            // markland
         (3, 3) => "https://doi.org/10/c5fr",           // stenqvist
         (4, 3) => "https://doi.org/10.1063/1.3216520", // fanourgakis
-        _ => "https://doi.org/c5fr",                   // poisson
+        _ => "https://doi.org/c5fr",                   // generic poisson
     };
 
     fn kappa(&self) -> Option<f64> {
@@ -380,6 +376,11 @@ fn test_poisson() {
     approx::assert_relative_eq!(pot.short_range_f1(0.5), -1.1484375, epsilon = eps);
     approx::assert_relative_eq!(pot.short_range_f2(0.5), 3.28125, epsilon = eps);
     approx::assert_relative_eq!(pot.short_range_f3(0.5), 6.5625, epsilon = eps);
+
+    assert_eq!(
+        pot.to_string(),
+        "Poisson: 𝐶 = 4, 𝐷 = 3, 𝑟✂ = 29.0 Å <https://doi.org/10.1063/1.3216520>"
+    )
 
     // Test
 }
