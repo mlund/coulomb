@@ -87,6 +87,9 @@ pub use salt::Salt;
 mod medium;
 pub use medium::Medium;
 
+const ANGSTROM_PER_METER: f64 = 1e10;
+const LITER_PER_ANGSTROM3: f64 = 1e-27;
+
 /// Trait for objects with a temperature
 pub trait Temperature {
     /// Get the temperature in Kelvin
@@ -140,7 +143,7 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
     }
 }
 
-/// Calculates the Bjerrum length, lB = e²/4πεkT commonly used in electrostatics (ångström).
+/// Calculates the Bjerrum length, λ𝐵 = e²/4πε𝑘𝑇 commonly used in electrostatics (ångström).
 ///
 /// More information at <https://en.wikipedia.org/wiki/Bjerrum_length>.
 ///
@@ -151,7 +154,6 @@ pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~
 pub fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
-    const ANGSTROM_PER_METER: f64 = 1e10;
     ELEMENTARY_CHARGE.powi(2) * ANGSTROM_PER_METER
         / (4.0
             * PI
@@ -161,7 +163,7 @@ pub fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
             * kelvin)
 }
 
-/// Calculates the Debye length in angstrom, λD = sqrt(8πlB·I·N·V)⁻¹, where I is the ionic strength in molar units (mol/l).
+/// Calculates the Debye length in angstrom, λ𝐷 = 1/√(8π·λ𝐵·𝐼·𝑁𝐴·𝑉), where 𝐼 is the ionic strength in molar units (mol/l).
 ///
 /// # Examples
 /// ~~~
@@ -171,7 +173,6 @@ pub fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
 /// assert_eq!(lambda, 17.576538097378368);
 /// ~~~
 pub fn debye_length(kelvin: f64, relative_permittivity: f64, ionic_strength: f64) -> f64 {
-    const LITER_PER_ANGSTROM3: f64 = 1e-27;
     (8.0 * PI
         * bjerrum_length(kelvin, relative_permittivity)
         * ionic_strength
@@ -205,7 +206,7 @@ pub fn debye_length(kelvin: f64, relative_permittivity: f64, ionic_strength: f64
 /// ```
 ///
 pub const TO_CHEMISTRY_UNIT: f64 =
-    ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * 1.0e10 * AVOGADRO_CONSTANT * 1e-3
+    ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * ANGSTROM_PER_METER * AVOGADRO_CONSTANT * 1e-3
         / (4.0 * PI * VACUUM_ELECTRIC_PERMITTIVITY);
 
 /// Bjerrum length in vacuum at 298.15 K, e²/4πε₀kT (Å).
