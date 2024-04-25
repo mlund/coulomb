@@ -272,8 +272,36 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SelfEnergyPrefactors {
+    monopole: Option<f64>,
+    dipole: Option<f64>,
+}
+
 /// # Interaction energy between multipoles
 pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors;
+
+    /// Self-energy of monopole and dipoles
+    ///
+    /// The self-energy is described by:
+    ///
+    /// $$u_{self} = \sum_i c_1 z_j^2 / R_c + c_2 \mu_i^2 / R_c^3 + ...$$
+    ///
+    /// where $c_1$ and $c_2$ are constants specific for the interaction scheme.
+    ///
+    #[allow(unused_variables)]
+    fn self_energy(&self, monopole_squared: &[f64], dipole_squared: &[f64]) -> f64 {
+        let mut sum: f64 = 0.0;
+        let prefactor = self.self_energy_prefactors();
+        if let Some(c1) = prefactor.monopole {
+            sum += c1 * monopole_squared.iter().sum::<f64>() / self.cutoff();
+        }
+        if let Some(c2) = prefactor.dipole {
+            sum += c2 * dipole_squared.iter().sum::<f64>() / self.cutoff().powi(3);
+        }
+        sum
+    }
     /// Interaction energy between two point charges
     ///
     /// z1: Point charge, UNIT: [input charge]

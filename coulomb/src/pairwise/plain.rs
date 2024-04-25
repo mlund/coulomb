@@ -13,7 +13,8 @@
 // limitations under the license.
 
 use super::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
+    ShortRangeFunction,
 };
 #[cfg(test)]
 use crate::{Matrix3, Vector3};
@@ -25,8 +26,13 @@ use serde::{Deserialize, Serialize};
 
 impl MultipolePotential for Plain {}
 impl MultipoleField for Plain {}
-impl MultipoleEnergy for Plain {}
 impl MultipoleForce for Plain {}
+
+impl MultipoleEnergy for Plain {
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        SelfEnergyPrefactors::default()
+    }
+}
 
 /// Scheme for vanilla Coulomb interactions, $S(q)=1$.
 ///

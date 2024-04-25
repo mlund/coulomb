@@ -56,8 +56,22 @@ impl Display for ReactionField {
 
 impl MultipolePotential for ReactionField {}
 impl MultipoleField for ReactionField {}
-impl MultipoleEnergy for ReactionField {}
 impl MultipoleForce for ReactionField {}
+
+impl MultipoleEnergy for ReactionField {
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        let monopole = if self.shift_to_zero {
+            Some(-3.0 * self.dielec_out / (4.0 * self.dielec_out + 2.0 * self.dielec_in))
+        } else {
+            None
+        };
+        let dipole = Some(
+            -(2.0 * self.dielec_out - 2.0 * self.dielec_in)
+                / (2.0 * (2.0 * self.dielec_out + self.dielec_in)),
+        );
+        SelfEnergyPrefactors { monopole, dipole }
+    }
+}
 
 impl ReactionField {
     /// Create a new reaction-field potential
@@ -136,6 +150,14 @@ mod tests {
         let dielec_out = 80.0;
 
         let pot = ReactionField::new_unshifted(cutoff, dielec_out, dielec_in);
+
+        assert_relative_eq!(pot.self_energy(&vec![4.0], &vec![0.0]), 0.0, epsilon = 1e-6);
+        assert_relative_eq!(
+            pot.self_energy(&vec![0.0], &vec![2.0]),
+            -0.00004023807698,
+            epsilon = 1e-9
+        );
+
         assert_relative_eq!(pot.short_range_f0(0.5), 1.061335404, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f1(0.5), 0.3680124224, epsilon = 1e-6);
         assert_relative_eq!(pot.short_range_f2(0.5), 1.472049689, epsilon = 1e-6);

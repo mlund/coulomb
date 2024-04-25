@@ -23,8 +23,31 @@ use serde::{Deserialize, Serialize};
 
 impl MultipolePotential for RealSpaceEwald {}
 impl MultipoleField for RealSpaceEwald {}
-impl MultipoleEnergy for RealSpaceEwald {}
 impl MultipoleForce for RealSpaceEwald {}
+impl MultipoleEnergy for RealSpaceEwald {
+    fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
+        // setSelfEnergyPrefactor(
+        //     {-eta / pi_sqrt *
+        //          (std::exp(-zeta2 / 4.0 / eta2) - pi_sqrt * zeta / (2.0 * eta) * std::erfc(zeta / (2.0 * eta))),
+        //      -eta3 / pi_sqrt * 2.0 / 3.0 *
+        //          (pi_sqrt * zeta3 / 4.0 / eta3 * std::erfc(zeta / (2.0 * eta)) +
+        //           (1.0 - zeta2 / 2.0 / eta2) * std::exp(-zeta2 / 4.0 / eta2))}); // ion-quadrupole self-energy term: XYZ
+        let monopole = Some(
+            -self.eta / Self::SQRT_PI
+                * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
+                    - Self::SQRT_PI * self.zeta.unwrap_or(0.0) / (2.0 * self.eta)
+                        * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))),
+        );
+        let dipole = Some(
+            -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0
+                * (Self::SQRT_PI * self.zeta.unwrap_or(0.0).powi(3) / 4.0 / self.eta.powi(3)
+                    * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))
+                    + (1.0 - self.zeta.unwrap_or(0.0).powi(2) / 2.0 / self.eta.powi(2))
+                        * f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))),
+        );
+        super::SelfEnergyPrefactors { monopole, dipole }
+    }
+}
 
 /// Scheme for real-space Ewald interactions
 ///
@@ -141,6 +164,18 @@ fn test_ewald() {
     // Test short-ranged function without salt
     let pot = RealSpaceEwald::new(29.0, 0.1, None);
     let eps = 1e-8;
+
+    assert_relative_eq!(
+        pot.self_energy(&vec![4.0], &vec![0.0]),
+        -0.2256758334,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot.self_energy(&vec![0.0], &vec![2.0]),
+        -0.000752257778,
+        epsilon = eps
+    );
+
     assert_relative_eq!(pot.short_range_f0(0.5), 0.04030484067840161, epsilon = eps);
     assert_relative_eq!(pot.short_range_f1(0.5), -0.39971358519150996, epsilon = eps);
     assert_relative_eq!(pot.short_range_f2(0.5), 3.36159125, epsilon = eps);
@@ -148,10 +183,24 @@ fn test_ewald() {
 
     // Test short-ranged function with a Debye screening length
     let pot = RealSpaceEwald::new(29.0, 0.1, Some(23.0));
-    let eps = 1e-6;
+    let eps = 1e-7;
+
+    // CHECK(pot.self_energy({4.0, 0.0}) == Approx(-0.1493013040));
+    // CHECK(pot.self_energy({0.0, 2.0}) == Approx(-0.0006704901976));
+    assert_relative_eq!(
+        pot.self_energy(&vec![4.0], &vec![0.0]),
+        -0.14930129209178544,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot.self_energy(&vec![0.0], &vec![2.0]),
+        -0.0006704901976,
+        epsilon = eps
+    );
+
     assert_relative_eq!(pot.kappa().unwrap(), 1.0 / 23.0, epsilon = eps);
     assert_relative_eq!(pot.short_range_f0(0.5), 0.07306333588, epsilon = eps);
-    assert_relative_eq!(pot.short_range_f1(0.5), -0.63444119, epsilon = eps);
-    assert_relative_eq!(pot.short_range_f2(0.5), 4.423133599, epsilon = eps);
-    assert_relative_eq!(pot.short_range_f3(0.5), -19.85937171, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f1(0.5), -0.6344413331247332, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f2(0.5), 4.42313324197739, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(0.5), -19.859372613319028, epsilon = eps);
 }
