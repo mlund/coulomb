@@ -24,7 +24,7 @@ use core::fmt::Display;
 ///
 /// where
 /// $\epsilon_{out}$ is the relative permittivity of the surrounding medium, _i.e._ "outside" the spherical cutoff.
-/// $\epsilon_{in}$ is the relative permittivity of the dispersing medium, _ i.e._ inside the spherical cutoff.
+/// $\epsilon_{in}$ is the relative permittivity of the dispersing medium, _i.e._ inside the spherical cutoff.
 /// The optional last term shifts the potential to zero at the cut-off radius.
 /// See <https://doi.org/dscmwg> for more information.
 #[derive(Debug, Clone, PartialEq)]
@@ -78,11 +78,23 @@ impl ReactionField {
     }
 
     /// Create unshifted reaction-field potential
+    ///
+    /// # Arguments
+    /// - `cutoff` - Spherical cut-off distance
+    /// - `dielec_out` - Relative permittivity outside the cut-off i.e. the surroundings
+    /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
+    ///
     pub fn new_unshifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, false)
     }
 
     /// Create shifted reaction-field potential
+    ///
+    /// # Arguments
+    /// - `cutoff` - Spherical cut-off distance
+    /// - `dielec_out` - Relative permittivity outside the cut-off i.e. the surroundings
+    /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
+    ///
     pub fn new_shifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, true)
     }

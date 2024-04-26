@@ -85,9 +85,19 @@ pub type Vector3 = nalgebra::Vector3<f64>;
 /// A 3x3 matrix
 pub type Matrix3 = nalgebra::Matrix3<f64>;
 
+const ANGSTROM_PER_METER: f64 = 1e10;
+const LITER_PER_ANGSTROM3: f64 = 1e-27;
+
 mod math;
+mod medium;
 pub mod pairwise;
+mod permittivity;
+pub mod reciprocal;
+mod salt;
 mod spline;
+pub use medium::Medium;
+pub use permittivity::{EmpiricalPermittivity, RelativePermittivity};
+pub use salt::Salt;
 
 use anyhow::Result;
 use physical_constants::{
@@ -95,16 +105,6 @@ use physical_constants::{
     VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use std::f64::consts::PI;
-
-mod permittivity;
-pub use permittivity::{EmpiricalPermittivity, RelativePermittivity};
-mod salt;
-pub use salt::Salt;
-mod medium;
-pub use medium::Medium;
-
-const ANGSTROM_PER_METER: f64 = 1e10;
-const LITER_PER_ANGSTROM3: f64 = 1e-27;
 
 /// Trait for objects with a temperature
 pub trait Temperature {

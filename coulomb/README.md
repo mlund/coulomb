@@ -31,6 +31,8 @@ The main purpose is to offer support for molecular simulation software.
 - Extensively unit tested and may serve as reference for other implementations or approximations.
 
 # Example
+
+## Electrolytes
 ~~~ rust
 use coulomb::{Medium, Salt};
 let molarity = 0.1;
@@ -38,4 +40,8 @@ let medium = Medium::salt_water(298.15, Salt::CalciumChloride, molarity);
 assert_eq!(medium.permittivity()?, 78.35565171480539);
 assert_eq!(medium.ionic_strength()?, 0.3);             // mol/l
 assert_eq!(medium.debye_length()?, 5.548902662386284); // angstrom
+~~~
+
+# Electrostatic interactions 
+~~~ rust
 ~~~

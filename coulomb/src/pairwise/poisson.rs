@@ -29,13 +29,21 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 ///
 /// This is a general scheme for the short-ranged part of the electrostatic interaction
 /// which can be used to arbitrarily cancel derivatives at the origin and at the cut-off.
-/// From the Conclusion of <https://doi.org/c5fr>:
+/// From the abstract of <https://doi.org/c5fr>:
 ///
-/// _"We have presented truncated pair-potentials for electrostatic interactions which as
-/// closely as possible solves the Poisson equation. Starting from the Poisson equation,
-/// we find two incompatible constraints on $S(q)$:
-/// cancellation of the zeroth and first order derivative at the cut-off, and zero-valued
-/// second order derivative at the entire interval."_
+/// _"Electrostatic pair-potentials within molecular simulations are often based on empirical data,
+/// cancellation of derivatives or moments, or statistical distributions of image-particles.
+/// In this work we start with the fundamental Poisson equation and show that no truncated Coulomb
+/// pair-potential, unsurprisingly, can solve the Poisson equation. For any such pair-potential
+/// the Poisson equation gives two incompatible constraints, yet we find a single unique expression
+/// which, pending two physically connected smoothness parameters, can obey either one of these.
+/// This expression has a general form which covers several recently published pair-potentials.
+/// For sufficiently large degree of smoothness we find that the solution implies a Gaussian
+/// distribution of the charge, a feature which is frequently assumed in pair-potential theory.
+/// We end up by recommending a single pair-potential based both on theoretical arguments and
+/// empirical evaluations of non-thermal lattice- and thermal water-systems.
+/// The same derivations have also been made for the screened Poisson equation,
+/// i.e. for Yukawa potentials, with a similar solution."_
 ///
 /// The general short-range function is:
 /// $$

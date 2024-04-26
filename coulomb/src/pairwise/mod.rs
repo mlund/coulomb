@@ -88,7 +88,15 @@ pub trait ShortRangeFunction {
     /// overridden with an analytical expression.
     fn short_range_f1(&self, q: f64) -> f64 {
         const EPS: f64 = 1e-6;
-        (self.short_range_f0(q + EPS) - self.short_range_f0(q - EPS)) / (2.0 * EPS)
+        if q <= EPS {
+            // avoid q < 0
+            (self.short_range_f0(EPS) - self.short_range_f0(0.0)) / EPS
+        } else if q >= 1.0 - EPS {
+            // avoid q > 1
+            (self.short_range_f0(1.0) - self.short_range_f0(1.0 - EPS)) / EPS
+        } else {
+            (self.short_range_f0(q + EPS) - self.short_range_f0(q - EPS)) / (2.0 * EPS)
+        }
     }
 
     /// Second derivative of the short-range function, 𝑑²𝑆(𝑞)/𝑑𝑞².
