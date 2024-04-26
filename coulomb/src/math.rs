@@ -27,6 +27,12 @@ pub(crate) fn erfc_x(x: f64) -> f64 {
     t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5)))) * f64::exp(-x * x)
 }
 
+/// Approximation of erf-function, see `erfc_x` for details
+#[inline]
+pub(crate) fn erf_x(x: f64) -> f64 {
+    1.0 - erfc_x(x)
+}
+
 pub(crate) fn _q_pochhammer_symbol(q: f64, l: i32, p: i32) -> f64 {
     let ct = (1..=p)
         .map(|n| (1..=(n + l)).map(|k| q.powi(k - 1)).sum::<f64>())

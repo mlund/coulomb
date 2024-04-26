@@ -41,6 +41,9 @@
 
 mod ewald;
 pub use ewald::*;
+mod ewald_truncated;
+pub use ewald_truncated::EwaldTruncated;
+
 mod plain;
 pub use plain::Plain;
 mod poisson;
