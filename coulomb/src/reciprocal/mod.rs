@@ -83,6 +83,7 @@ pub trait ReciprocalEnergy: ReciprocalState {
     fn reciprocal_energy() -> f64;
 
     /// Surface energy due to the dipole moment of the system, Eₛ = 2π / (2ε + 1) * μ² / V
+    /// @todo Unit?
     fn surface_energy(&self, system_dipole_moment: f64) -> f64 {
         2.0 * PI / (2.0 * f64::from(self.surface_permittivity()) + 1.0) / self.volume()
             * system_dipole_moment.powi(2)
