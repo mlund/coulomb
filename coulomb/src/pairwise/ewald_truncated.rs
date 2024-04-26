@@ -3,11 +3,12 @@ use crate::pairwise::{
     ShortRangeFunction,
 };
 use crate::{math::erf_x, math::erfc_x, Cutoff};
+use core::f64::consts::FRAC_2_SQRT_PI;
 
-/// Truncated Ewald summation scheme
-/// 
+/// Truncated Gaussian Ewald scheme (real-space part).
+///
 /// From the abstract of <https://doi.org/dsd6>:
-/// 
+///
 /// _We present the widespread Ewald summation method in a new light
 /// by utilizing a truncated Gaussian screening charge distribution.
 /// This choice entails an exact formalism, also as particle mesh Ewald,
@@ -28,7 +29,7 @@ pub struct EwaldTruncated {
     erfc_eta: f64,
     /// exp(-eta^2)
     exp_minus_eta2: f64,
-    /// f0 = 1 - erfc(eta) - 2 * eta / sqrt(pi) * exp(-eta^2)
+    /// f0 = 1 / (1 - erfc(eta) - 2 * eta / sqrt(pi) * exp(-eta^2))
     f0: f64,
 }
 
@@ -38,7 +39,7 @@ impl EwaldTruncated {
 
     pub fn new(cutoff: f64, alpha: f64) -> Self {
         let eta = alpha * cutoff;
-        let f0 = 1.0 - erfc_x(eta) - 2.0 * eta * Self::FRAC_1_SQRT_PI * (-eta * eta).exp();
+        let f0 = (1.0 - erfc_x(eta) - eta * FRAC_2_SQRT_PI * (-eta * eta).exp()).recip();
         Self {
             cutoff,
             eta,
@@ -59,7 +60,7 @@ impl ShortRangeFunction for EwaldTruncated {
     const URL: &'static str = "https://doi.org/dsd6";
 
     fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
-        let c1 = -self.eta * Self::FRAC_1_SQRT_PI * (1.0 - self.exp_minus_eta2) / self.f0;
+        let c1 = -self.eta * Self::FRAC_1_SQRT_PI * (1.0 - self.exp_minus_eta2) * self.f0;
         let c2 = -2.0 * self.eta.powi(3)
             / (3.0
                 * (erf_x(self.eta) / Self::FRAC_1_SQRT_PI - 2.0 * self.eta * self.exp_minus_eta2));
@@ -74,25 +75,24 @@ impl ShortRangeFunction for EwaldTruncated {
     fn short_range_f0(&self, q: f64) -> f64 {
         (erfc_x(self.eta * q)
             - self.erfc_eta
-            - (1.0 - q) * 2.0 * self.eta * Self::FRAC_1_SQRT_PI * self.exp_minus_eta2)
-            / self.f0
+            - (1.0 - q) * self.eta * FRAC_2_SQRT_PI * self.exp_minus_eta2)
+            * self.f0
     }
     fn short_range_f1(&self, q: f64) -> f64 {
-        -2.0 * self.eta
+        -self.eta
             * ((-(self.eta * q).powi(2)).exp() - self.exp_minus_eta2)
-            * Self::FRAC_1_SQRT_PI
-            / self.f0
+            * FRAC_2_SQRT_PI
+            * self.f0
     }
     fn short_range_f2(&self, q: f64) -> f64 {
-        4.0 * self.eta.powi(3) * q * (-(self.eta * q).powi(2)).exp() * Self::FRAC_1_SQRT_PI
-            / self.f0
+        2.0 * self.eta.powi(3) * q * (-(self.eta * q).powi(2)).exp() * FRAC_2_SQRT_PI * self.f0
     }
     fn short_range_f3(&self, q: f64) -> f64 {
-        -8.0 * ((self.eta * q).powi(2) - 0.5)
+        -4.0 * ((self.eta * q).powi(2) - 0.5)
             * self.eta.powi(3)
             * (-(self.eta * q).powi(2)).exp()
-            * Self::FRAC_1_SQRT_PI
-            / self.f0
+            * FRAC_2_SQRT_PI
+            * self.f0
     }
 }
 
