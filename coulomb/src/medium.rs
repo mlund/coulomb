@@ -125,8 +125,7 @@ impl Display for Medium {
             self.temperature,
             self.permittivity.permittivity(self.temperature).unwrap(),
             self.bjerrum_length(),
-        )
-        .unwrap();
+        )?;
         if let Some((salt, molarity)) = &self.salt {
             write!(
                 f,
@@ -135,8 +134,7 @@ impl Display for Medium {
                 self.debye_length().unwrap(),
                 molarity,
                 salt
-            )
-            .unwrap();
+            )?;
         };
         Ok(())
     }
