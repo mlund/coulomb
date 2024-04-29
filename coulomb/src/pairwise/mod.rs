@@ -246,21 +246,24 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
             return Vector3::zeros();
         }
         let r1 = r.norm();
-        let r3 = r1 * r2;
+        let r3_inv = (r1 * r2).recip();
         let q = r1 / self.cutoff();
-        let kr = self.kappa().unwrap_or(0.0) * r1;
-        let kr2 = kr * kr;
-        let srf = self.short_range_f0(q);
-        let dsrf = self.short_range_f1(q);
-        let ddsrf = self.short_range_f2(q);
+        let srf0 = self.short_range_f0(q);
+        let srf1 = self.short_range_f1(q);
+        let srf2 = self.short_range_f2(q);
 
-        let field_d = (3.0 * dipole.dot(r) * r / r2 - dipole) / r3
-            * (srf * (1.0 + kr + kr2 / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
-                + q * q / 3.0 * ddsrf);
+        let mut field = (3.0 * dipole.dot(r) * r / r2 - dipole) * r3_inv;
 
-        let field_i = dipole / r3 * (srf * kr2 - 2.0 * kr * q * dsrf + ddsrf * q * q) / 3.0;
-
-        (field_d + field_i) * (-kr).exp()
+        if let Some(kappa) = self.kappa() {
+            let kr = kappa * r1;
+            let kr2 = kr * kr;
+            field *= srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
+                + q * q / 3.0 * srf2;
+            let field_i = dipole * r3_inv * (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
+            (field + field_i) * (-kappa * r1).exp()
+        } else {
+            field * srf0 + dipole * r3_inv * q * q * srf2 / 3.0
+        }
     }
     /// Electrostatic field from point quadrupole.
     ///

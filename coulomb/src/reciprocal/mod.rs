@@ -14,7 +14,7 @@
 
 //! Support for working with reciprocal space in Ewald summation schemes.
 
-use crate::{Cutoff};
+use crate::Cutoff;
 use core::f64::consts::PI;
 use core::iter::{zip, IntoIterator};
 
