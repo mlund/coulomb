@@ -237,9 +237,9 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
     /// Field from dipole [UNIT: (input charge) / (input length)^2]
     ///
     /// The field from a point dipole is described by the formula:
-    /// E(mu, r) = (3 * (mu.dot(r) * r / r2) - mu) / r3 *
-    ///             (s(q) - q * s'(q) + q^2 / 3 * s''(q)) +
-    ///             mu / r3 * (s(q) * kr^2 - 2 * kr * q * s'(q) + q^2 / 3 * s''(q))
+    /// E(mu, r) = (3 * (mu.dot(r) * r / r²) - mu) / r3 *
+    ///             (s(q) - q * s'(q) + q² / 3 * s''(q)) +
+    ///             mu / r3 * (s(q) * 𝜅r² - 2 * 𝜅r * q * s'(q) + q² / 3 * s''(q))
     fn dipole_field(&self, dipole: &Vector3, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
@@ -251,7 +251,6 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let srf0 = self.short_range_f0(q);
         let srf1 = self.short_range_f1(q);
         let srf2 = self.short_range_f2(q);
-
         let mut field = (3.0 * dipole.dot(r) * r / r2 - dipole) * r3_inv;
 
         if let Some(kappa) = self.kappa() {
@@ -260,7 +259,7 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
             field *= srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
                 + q * q / 3.0 * srf2;
             let field_i = dipole * r3_inv * (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
-            (field + field_i) * (-kappa * r1).exp()
+            (field + field_i) * (-kr).exp()
         } else {
             field * srf0 + dipole * r3_inv * q * q * srf2 / 3.0
         }
