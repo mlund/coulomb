@@ -14,7 +14,7 @@
 
 //! Support for working with reciprocal space in Ewald summation schemes.
 
-use crate::{Cutoff, Vector3};
+use crate::{Cutoff};
 use core::f64::consts::PI;
 use core::iter::{zip, IntoIterator};
 
@@ -48,8 +48,10 @@ impl From<BoundaryPermittivity> for f64 {
 /// - Update optimization <https://doi.org/10.1063/1.481216>, Eq. 24
 /// - Isotropic periodic boundary conditions, <https://doi.org/10/css8>
 pub trait ReciprocalState: Cutoff {
+    type Vector3;
+
     /// Reciprocal space vectors, q
-    fn k_vectors(&self) -> &'static [Vector3];
+    fn k_vectors(&self) -> &'static [Self::Vector3];
     /// Reciprocal space cutoff
     fn recip_cutoff(&self) -> u32;
     /// Relative permittivity if the surrounding medium
@@ -66,16 +68,16 @@ pub trait ReciprocalState: Cutoff {
     /// Recalculate all k-vectors
     fn recalc_k_vectors(
         &mut self,
-        positions: impl IntoIterator<Item = Vector3>,
+        positions: impl IntoIterator<Item = Self::Vector3>,
         charges: impl IntoIterator<Item = f64>,
     );
 }
 
 /// Calculate the dipole moment of a system with respect to the geometric center
 fn _dipole_moment(
-    positions: impl IntoIterator<Item = Vector3>,
+    positions: impl IntoIterator<Item = crate::Vector3>,
     charges: impl IntoIterator<Item = f64>,
-) -> Vector3 {
+) -> crate::Vector3 {
     zip(positions, charges).map(|(p, q)| p * q).sum()
 }
 
