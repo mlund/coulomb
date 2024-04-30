@@ -121,8 +121,10 @@ impl MultipolePotential for EwaldTruncated {}
 #[test]
 fn test_truncated_ewald() {
     use approx::assert_relative_eq;
-    let pot = EwaldTruncated::new(29.0, 0.1);
+    let cutoff = 29.0;
+    let alpha = 0.1;
     let eps = 1e-9;
+    let pot = EwaldTruncated::new(cutoff, alpha);
     assert_relative_eq!(pot.short_range_f0(0.5), 0.03993019621374575, epsilon = eps);
     assert_relative_eq!(pot.short_range_f1(0.5), -0.39929238172082965, epsilon = eps);
     assert_relative_eq!(pot.short_range_f2(0.5), 3.364180431728417, epsilon = eps);

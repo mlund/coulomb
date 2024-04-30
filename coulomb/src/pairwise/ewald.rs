@@ -157,20 +157,19 @@ impl ShortRangeFunction for RealSpaceEwald {
 
     fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
         // todo: unwrap once
-        let monopole = Some(
-            -self.eta / Self::SQRT_PI
-                * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
-                    - Self::SQRT_PI * self.zeta.unwrap_or(0.0) / (2.0 * self.eta)
-                        * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))),
-        );
-        let dipole = Some(
-            -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0
-                * (Self::SQRT_PI * self.zeta.unwrap_or(0.0).powi(3) / 4.0 / self.eta.powi(3)
-                    * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))
-                    + (1.0 - self.zeta.unwrap_or(0.0).powi(2) / 2.0 / self.eta.powi(2))
-                        * f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))),
-        );
-        super::SelfEnergyPrefactors { monopole, dipole }
+        let c1 = -self.eta / Self::SQRT_PI
+            * (f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2))
+                - Self::SQRT_PI * self.zeta.unwrap_or(0.0) / (2.0 * self.eta)
+                    * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta)));
+        let c2 = -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0
+            * (Self::SQRT_PI * self.zeta.unwrap_or(0.0).powi(3) / 4.0 / self.eta.powi(3)
+                * erfc_x(self.zeta.unwrap_or(0.0) / (2.0 * self.eta))
+                + (1.0 - self.zeta.unwrap_or(0.0).powi(2) / 2.0 / self.eta.powi(2))
+                    * f64::exp(-self.zeta.unwrap_or(0.0).powi(2) / 4.0 / self.eta.powi(2)));
+        super::SelfEnergyPrefactors {
+            monopole: Some(c1),
+            dipole: Some(c2),
+        }
     }
 }
 
@@ -181,12 +180,12 @@ fn test_ewald() {
     let eps = 1e-8;
 
     assert_relative_eq!(
-        pot.self_energy(&vec![2.0], &vec![0.0]),
+        pot.self_energy(&[2.0], &[0.0]),
         -0.2256758334,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.self_energy(&vec![0.0], &vec![f64::sqrt(2.0)]),
+        pot.self_energy(&[0.0], &[f64::sqrt(2.0)]),
         -0.000752257778,
         epsilon = eps
     );
@@ -200,15 +199,13 @@ fn test_ewald() {
     let pot = RealSpaceEwald::new(29.0, 0.1, Some(23.0));
     let eps = 1e-7;
 
-    // CHECK(pot.self_energy({4.0, 0.0}) == Approx(-0.1493013040));
-    // CHECK(pot.self_energy({0.0, 2.0}) == Approx(-0.0006704901976));
     assert_relative_eq!(
-        pot.self_energy(&vec![2.0], &vec![0.0]),
+        pot.self_energy(&[2.0], &[0.0]),
         -0.14930129209178544,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.self_energy(&vec![0.0], &vec![f64::sqrt(2.0)]),
+        pot.self_energy(&[0.0], &[f64::sqrt(2.0)]),
         -0.0006704901976,
         epsilon = eps
     );

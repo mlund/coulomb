@@ -225,6 +225,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         };
         let mut sum1 = 1.0;
         let mut sum2 = 0.0;
+
         for c in 1..C {
             let factor = (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64;
             sum1 += factor * qp.powi(c);
