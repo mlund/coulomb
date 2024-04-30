@@ -195,21 +195,6 @@ pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
         0.5 * ((3.0 / r2 * (r.transpose() * quad * r)[0] - quad.trace()) * a + quad.trace() * b)
             / (r1 * r2)
             * (-kr).exp()
-
-        // C++:
-        // const double r1 = std::sqrt(r2);
-        // const double q = r1 * inverse_cutoff;
-        // const double q2 = q * q;
-        // const double kr = inverse_debye_length * r1;
-        // const double kr2 = kr * kr;
-        // const double srf0 = static_cast<const T *>(this)->short_range_function(q);
-        // const double srf1 = static_cast<const T *>(this)->short_range_function_derivative(q);
-        // const double srf2 = static_cast<const T *>(this)->short_range_function_second_derivative(q);
-
-        // const double a = (srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * srf2);
-        // const double b = (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q2) / 3.0;
-        // return 0.5 * ((3.0 / r2 * r.transpose() * quad * r - quad.trace()) * a + quad.trace() * b) / r2 / r1 *
-        //        std::exp(-inverse_debye_length * r1);
     }
 }
 
@@ -316,14 +301,7 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let field_i = quadfactor * r_hat / r4
             * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
                 - q2 * q * s3);
-        return 0.5 * (field_d + field_i) * (-kr).exp();
-
-        // let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
-        //     * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
-        // let field_i = quadfactor * r_hat / r4
-        //     * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
-        //         - q2 * q * s3);
-        // 0.5 * (field_d + field_i) * (-kr).exp()
+        0.5 * (field_d + field_i) * (-kr).exp()
     }
 }
 
