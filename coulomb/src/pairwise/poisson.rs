@@ -204,7 +204,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             return 1.0 - qp;
         }
 
-        // todo: check if binomial coeff. could be evaluated at compile time, e.g. with recursion.
+        // todo: could binomial coeffs be evaluated at compile time? E.g. with recursion.
         let sum: f64 = (0..C)
             .map(|c| (binomial(D - 1 + c, c) * (C - c)) as f64 / f64::from(C) * qp.powi(c))
             .sum();
@@ -273,24 +273,18 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         if D == 0 && C == 1 {
             return 0.0;
         }
-        let mut qp = q;
-        let mut dqpdq = 1.0;
-        let mut d2qpdq2 = 0.0;
-        let mut d3qpdq3 = 0.0;
-        let mut d2sdqp2 = 0.0;
-        let mut dsdqp = 0.0;
 
-        if let Some(s) = &self.screening {
-            qp = (1.0 - (2.0 * s.reduced_kappa * q).exp()) * s.yukawa_denom;
-            dqpdq = -2.0 * s.reduced_kappa * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            d2qpdq2 =
+        let (qp, dqpdq, d2qpdq2, d3qpdq3, d2sdqp2, dsdqp) = if let Some(s) = &self.screening {
+            let qp = (1.0 - (2.0 * s.reduced_kappa * q).exp()) * s.yukawa_denom;
+            let dqpdq = -2.0 * s.reduced_kappa * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
+            let d2qpdq2 =
                 -4.0 * s.reduced_kappa_squared * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            d3qpdq3 = -8.0
+            let d3qpdq3 = -8.0
                 * s.reduced_kappa_squared
                 * s.reduced_kappa
                 * (2.0 * s.reduced_kappa * q).exp()
                 * s.yukawa_denom;
-            d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
+            let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
             for c in 1..C {
@@ -299,8 +293,12 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
                     * c as f64
                     * qp.powi(c - 1);
             }
-            dsdqp = -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
-        }
+            let dsdqp =
+                -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
+            (qp, dqpdq, d2qpdq2, d3qpdq3, d2sdqp2, dsdqp)
+        } else {
+            (q, 1.0, 0.0, 0.0, 0.0, 0.0)
+        };
         let d3sdqp3 = self.binom_cdc
             * (1.0 - qp).powi(D - 2)
             * qp.powi(C - 2)
