@@ -76,9 +76,9 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct Screening {
-    /// Debye screening length
-    pub debye_length: f64,
-    /// Reduced kappa = cutoff / debye_length
+    /// Inverse Debye screening length
+    pub kappa: f64,
+    /// Reduced kappa = cutoff * kappa
     pub reduced_kappa: f64,
     pub reduced_kappa_squared: f64,
     pub yukawa_denom: f64,
@@ -140,17 +140,15 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         let _has_dipolar_selfenergy = C >= 2;
 
-        let screening = if let Some(debye_length) = debye_length {
+        let screening = debye_length.map(|debye_length| {
             let reduced_kappa = cutoff / debye_length;
-            Some(Screening {
-                debye_length,
+            Screening {
+                kappa: 1.0 / debye_length,
                 reduced_kappa,
-                reduced_kappa_squared: reduced_kappa * reduced_kappa,
+                reduced_kappa_squared: reduced_kappa.powi(2),
                 yukawa_denom: 1.0 / (1.0 - (2.0 * reduced_kappa).exp()),
-            })
-        } else {
-            None
-        };
+            }
+        });
 
         let binom_cdc = if screening.is_some() || D != -C {
             f64::from(binomial(C + D, C) * D)
@@ -188,7 +186,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
     };
 
     fn kappa(&self) -> Option<f64> {
-        self.screening.as_ref().map(|s| s.debye_length.recip())
+        self.screening.as_ref().map(|s| s.kappa)
     }
 
     fn short_range_f0(&self, q: f64) -> f64 {
