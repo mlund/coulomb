@@ -280,28 +280,37 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         if r2 >= self.cutoff_squared() {
             return Vector3::zeros();
         }
-        let r_norm = r.norm();
-        let r_hat = r / r_norm;
-        let q = r_norm / self.cutoff();
+        let r1 = r.norm();
+        let r_hat = r / r1;
+        let q = r1 / self.cutoff();
         let q2 = q * q;
-        let kr = self.kappa().unwrap_or(0.0) * r_norm;
-        let kr2 = kr * kr;
         let r4 = r2 * r2;
         let quadrh = quad * r_hat;
         let quad_trh = quad.transpose() * r_hat;
 
-        let quadfactor = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
         let s0 = self.short_range_f0(q);
         let s1 = self.short_range_f1(q);
         let s2 = self.short_range_f2(q);
         let s3 = self.short_range_f3(q);
 
-        let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
-            * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
-        let field_i = quadfactor * r_hat / r4
-            * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
-                - q2 * q * s3);
-        0.5 * (field_d + field_i) * (-kr).exp()
+        let f = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
+        let mut field_d = 3.0 * ((5.0 * f - quad.trace()) * r_hat - quadrh - quad_trh) / r4;
+
+        if let Some(kappa) = self.kappa() {
+            let kr = kappa * r1;
+            let kr2 = kr * kr;
+            field_d *=
+                s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2;
+            let field_i = f * r_hat / r4
+                * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr
+                    + s2 * (1.0 + 3.0 * kr) * q2
+                    - q2 * q * s3);
+            0.5 * (field_d + field_i) * (-kr).exp()
+        } else {
+            field_d *= s0 - q * s1 + q2 / 3.0 * s2;
+            let field_i = f * r_hat / r4 * (s2 * q2 - q2 * q * s3);
+            0.5 * (field_d + field_i)
+        }
     }
 }
 
