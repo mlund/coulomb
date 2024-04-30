@@ -492,33 +492,38 @@ pub trait MultipoleForce: MultipoleField {
     ///                  + FI(mu1, mu2, r) * (s''(q) - q * s'''(q)) * q^2 * exp(-kr)
     fn dipole_dipole_force(&self, mu1: &Vector3, mu2: &Vector3, r: &Vector3) -> Vector3 {
         let r2 = r.norm_squared();
-        if r2 < self.cutoff_squared() {
-            let r1 = r.norm();
-            let rh = r / r1;
-            let q = r1 / self.cutoff();
-            let q2 = q * q;
-            let kr = self.kappa().unwrap_or(0.0) * r1;
-            let r4 = r2 * r2;
-            let mu1_dot_rh = mu1.dot(&rh);
-            let mu2_dot_rh = mu2.dot(&rh);
-            let mut force_d = 3.0
-                * ((5.0 * mu1_dot_rh * mu2_dot_rh - mu1.dot(mu2)) * rh
-                    - mu2_dot_rh * mu1
-                    - mu1_dot_rh * mu2)
-                / r4;
-            let srf = self.short_range_f0(q);
-            let dsrf = self.short_range_f1(q);
-            let ddsrf = self.short_range_f2(q);
-            let dddsrf = self.short_range_f3(q);
-            force_d *= srf * (1.0 + kr + kr * kr / 3.0) - q * dsrf * (1.0 + 2.0 / 3.0 * kr)
-                + q2 / 3.0 * ddsrf;
+        if r2 >= self.cutoff_squared() {
+            return Vector3::zeros();
+        }
+        let r1 = r.norm();
+        let rh = r / r1;
+        let q = r1 / self.cutoff();
+        let q2 = q * q;
+        let r4 = r2 * r2;
+        let mu1_dot_rh = mu1.dot(&rh);
+        let mu2_dot_rh = mu2.dot(&rh);
+        let srf0 = self.short_range_f0(q);
+        let srf1 = self.short_range_f1(q);
+        let srf2 = self.short_range_f2(q);
+        let srf3 = self.short_range_f3(q);
+        let mut force_d = 3.0
+            * ((5.0 * mu1_dot_rh * mu2_dot_rh - mu1.dot(mu2)) * rh
+                - mu2_dot_rh * mu1
+                - mu1_dot_rh * mu2)
+            / r4;
+        if let Some(kappa) = self.kappa() {
+            let kr = kappa * r1;
+            force_d *= srf0 * (1.0 + kr + kr * kr / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
+                + q2 / 3.0 * srf2;
             let force_i = mu1_dot_rh * mu2_dot_rh * rh / r4
-                * (srf * (1.0 + kr) * kr * kr - q * dsrf * (3.0 * kr + 2.0) * kr
-                    + ddsrf * (1.0 + 3.0 * kr) * q2
-                    - q2 * q * dddsrf);
+                * (srf0 * (1.0 + kr) * kr * kr - q * srf1 * (3.0 * kr + 2.0) * kr
+                    + srf2 * (1.0 + 3.0 * kr) * q2
+                    - q2 * q * srf3);
             (force_d + force_i) * (-kr).exp()
         } else {
-            Vector3::zeros()
+            force_d *= srf0 - q * srf1 + q * q / 3.0 * srf2;
+            let force_i = mu1_dot_rh * mu2_dot_rh * rh / r4 * (srf2 * (1.0) * q2 - q2 * q * srf3);
+            force_d + force_i
         }
     }
 
