@@ -185,15 +185,31 @@ pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
         let r1 = r.norm();
         let q = r1 / self.cutoff();
         let kr = self.kappa().unwrap_or(0.0) * r1;
-        let s0 = self.short_range_f0(q);
-        let s1 = self.short_range_f1(q);
-        let s2 = self.short_range_f2(q);
+        let srf0 = self.short_range_f0(q);
+        let srf1 = self.short_range_f1(q);
+        let srf2 = self.short_range_f2(q);
+        let kr2 = kr * kr;
         let a =
-            s0 * (1.0 + kr + kr * kr / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q * q / 3.0 * s2;
-        let b = (s0 * kr * kr - 2.0 * kr * q * s1 + s2 * q * q) / 3.0;
+            srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr) + q * q / 3.0 * srf2;
+        let b = (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
         0.5 * ((3.0 / r2 * (r.transpose() * quad * r)[0] - quad.trace()) * a + quad.trace() * b)
             / (r1 * r2)
             * (-kr).exp()
+
+        // C++:
+        // const double r1 = std::sqrt(r2);
+        // const double q = r1 * inverse_cutoff;
+        // const double q2 = q * q;
+        // const double kr = inverse_debye_length * r1;
+        // const double kr2 = kr * kr;
+        // const double srf0 = static_cast<const T *>(this)->short_range_function(q);
+        // const double srf1 = static_cast<const T *>(this)->short_range_function_derivative(q);
+        // const double srf2 = static_cast<const T *>(this)->short_range_function_second_derivative(q);
+
+        // const double a = (srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * srf2);
+        // const double b = (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q2) / 3.0;
+        // return 0.5 * ((3.0 / r2 * r.transpose() * quad * r - quad.trace()) * a + quad.trace() * b) / r2 / r1 *
+        //        std::exp(-inverse_debye_length * r1);
     }
 }
 
@@ -252,7 +268,7 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let srf1 = self.short_range_f1(q);
         let srf2 = self.short_range_f2(q);
         let mut field = (3.0 * dipole.dot(r) * r / r2 - dipole) * r3_inv;
-        
+
         if let Some(kappa) = self.kappa() {
             let kr = kappa * r1;
             let kr2 = kr * kr;
@@ -295,24 +311,12 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let s2 = self.short_range_f2(q);
         let s3 = self.short_range_f3(q);
 
-        if kr == 0.0 && kr2 == 0.0 {
-            let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
-                / r4
-                * (s0 - q * s1)
-                * (1.0 + q2 / 3.0 * s2);
-            let field_i =
-                quadfactor * r_hat / r4 * (s0 * kr2 - q * s1 * 2.0 * kr + s2 * q2 - q2 * q * s3);
-            return 0.5 * (field_d + field_i);
-        } else {
-            let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
-                / r4
-                * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
-            let field_i = quadfactor * r_hat / r4
-                * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr
-                    + s2 * (1.0 + 3.0 * kr) * q2
-                    - q2 * q * s3);
-            return 0.5 * (field_d + field_i) * (-kr).exp();
-        }
+        let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
+            * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
+        let field_i = quadfactor * r_hat / r4
+            * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
+                - q2 * q * s3);
+        return 0.5 * (field_d + field_i) * (-kr).exp();
 
         // let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
         //     * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
