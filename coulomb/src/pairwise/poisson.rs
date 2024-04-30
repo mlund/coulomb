@@ -467,38 +467,81 @@ fn test_poisson() {
 
     // Test energies
     assert_relative_eq!(pot43.ion_ion_energy(zA, zB, cutoff), 0.0, epsilon = eps);
-    assert_relative_eq!(pot43.ion_ion_energy(zA, zB, r.norm()), 0.002829195636, epsilon = eps);
-    assert_relative_eq!(pot43.ion_dipole_energy(zA, &muB, &rh.scale(cutoff)), 0.0, epsilon = eps);
-    assert_relative_eq!(pot43.ion_dipole_energy(zA, &muB, &r), -0.007868703705, epsilon = eps);
-    assert_relative_eq!(pot43.ion_dipole_energy(zB, &muA, &-r), 0.01725061966, epsilon = eps);
-    assert_relative_eq!(pot43.dipole_dipole_energy(&muA, &muB, &rh.scale(cutoff)), 0.0, epsilon = eps);
-    assert_relative_eq!(pot43.dipole_dipole_energy(&muA, &muB, &r), -0.03284312288, epsilon = eps);
-    assert_relative_eq!(pot43.ion_quadrupole_energy(zB, &quadA, &rq.scale(cutoff / 23.0 * 29.0)), 0.0, epsilon = eps);
-    assert_relative_eq!(pot43.ion_quadrupole_energy(zB, &quadA, &rq), 0.002697684495, epsilon = eps);
-    assert_relative_eq!(pot43.ion_quadrupole_energy(zA, &quadB, &-rq.scale(cutoff / 23.0 * 29.0)), 0.0, epsilon = eps);
-    assert_relative_eq!(pot43.ion_quadrupole_energy(zA, &quadB, &-rq), 0.0, epsilon = eps);
+    assert_relative_eq!(
+        pot43.ion_ion_energy(zA, zB, r.norm()),
+        0.002829195636,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_dipole_energy(zA, &muB, &rh.scale(cutoff)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_dipole_energy(zA, &muB, &r),
+        -0.007868703705,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_dipole_energy(zB, &muA, &-r),
+        0.01725061966,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.dipole_dipole_energy(&muA, &muB, &rh.scale(cutoff)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.dipole_dipole_energy(&muA, &muB, &r),
+        -0.03284312288,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_quadrupole_energy(zB, &quadA, &rq.scale(cutoff / 23.0 * 29.0)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_quadrupole_energy(zB, &quadA, &rq),
+        0.002697684495,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_quadrupole_energy(zA, &quadB, &-rq.scale(cutoff / 23.0 * 29.0)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.ion_quadrupole_energy(zA, &quadB, &-rq),
+        0.0,
+        epsilon = eps
+    );
 
-   // Test forces
-//    CHECK(pot43.ion_ion_force(zA, zB, cutoff * rh).norm() == Approx(0.0));
-//    vec3 F_ionion = pot43.ion_ion_force(zA, zB, r);
-//    CHECK(F_ionion[0] == Approx(0.001815854701));
-//    CHECK(F_ionion.norm() == Approx(0.001815854701));
-//    CHECK(pot43.ion_dipole_force(zB, muA, cutoff * rh).norm() == Approx(0.0));
-//    vec3 F_iondipoleBA = pot43.ion_dipole_force(zB, muA, r);
-//    CHECK(F_iondipoleBA[0] == Approx(0.008107541263));
-//    CHECK(F_iondipoleBA[1] == Approx(-0.0002763257154));
-//    CHECK(F_iondipoleBA[2] == Approx(-0.0004342261242));
+    // Test forces
+    assert_relative_eq!(
+        pot43.ion_ion_force(zA, zB, &Vector3::new(cutoff, 0.0, 0.0)).norm(),
+        0.0,
+        epsilon = eps
+    );
+    let f_ionion = pot43.ion_ion_force(zA, zB, &r);
+    assert_relative_eq!(f_ionion[0], 0.001815854701, epsilon = eps);
+    assert_relative_eq!(f_ionion.norm(), 0.001815854701, epsilon = eps);
 
-//    vec3 F_iondipoleAB = pot43.ion_dipole_force(zA, muB, -r);
-//    CHECK(F_iondipoleAB[0] == Approx(0.003698176716));
-//    CHECK(F_iondipoleAB[1] == Approx(-0.0004473844916));
-//    CHECK(F_iondipoleAB[2] == Approx(-0.0001315836740));
+    // CHECK(pot43.ion_dipole_force(zB, muA, cutoff * rh).norm() == Approx(0.0));
+    let f_iondipole_ba = pot43.ion_dipole_force(zB, &muA, &r);
+    assert_relative_eq!(f_iondipole_ba[0], 0.008107541263, epsilon = eps);
+    assert_relative_eq!(f_iondipole_ba[1], -0.0002763257154, epsilon = eps);
+    assert_relative_eq!(f_iondipole_ba[2], -0.0004342261242, epsilon = eps);
 
-//    CHECK(pot43.dipole_dipole_force(muA, muB, cutoff * rh).norm() == Approx(0.0));
-//    vec3 F_dipoledipole = pot43.dipole_dipole_force(muA, muB, r);
-//    CHECK(F_dipoledipole[0] == Approx(0.009216400961));
-//    CHECK(F_dipoledipole[1] == Approx(-0.002797126801));
-//    CHECK(F_dipoledipole[2] == Approx(-0.001608010094));
+    let f_iondipole_ab = pot43.ion_dipole_force(zA, &muB, &-r);
+    assert_relative_eq!(f_iondipole_ab[0], 0.003698176716, epsilon = eps);
+    assert_relative_eq!(f_iondipole_ab[1], -0.0004473844916, epsilon = eps);
+    assert_relative_eq!(f_iondipole_ab[2], -0.0001315836740, epsilon = eps);
 
-
+    // CHECK(pot43.dipole_dipole_force(muA, muB, cutoff * rh).norm() == Approx(0.0));
+    let f_dipoledipole = pot43.dipole_dipole_force(&muA, &muB, &r);
+    assert_relative_eq!(f_dipoledipole[0], 0.009216400961, epsilon = eps);
+    assert_relative_eq!(f_dipoledipole[1], -0.002797126801, epsilon = eps);
+    assert_relative_eq!(f_dipoledipole[2], -0.001608010094, epsilon = eps);
 }
