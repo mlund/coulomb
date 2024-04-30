@@ -1,5 +1,8 @@
 // Copyright 2023 Björn Stenqvist and Mikael Lund
 //
+// Converted to Rust with modification from the C++ library "CoulombGalore":
+// https://zenodo.org/doi/10.5281/zenodo.3522058
+//
 // Licensed under the Apache license, version 2.0 (the "license");
 // you may not use this file except in compliance with the license.
 // You may obtain a copy of the license at
