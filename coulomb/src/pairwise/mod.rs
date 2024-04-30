@@ -184,17 +184,25 @@ pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
         }
         let r1 = r.norm();
         let q = r1 / self.cutoff();
-        let kr = self.kappa().unwrap_or(0.0) * r1;
         let srf0 = self.short_range_f0(q);
         let srf1 = self.short_range_f1(q);
         let srf2 = self.short_range_f2(q);
-        let kr2 = kr * kr;
-        let a =
-            srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr) + q * q / 3.0 * srf2;
-        let b = (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
-        0.5 * ((3.0 / r2 * (r.transpose() * quad * r)[0] - quad.trace()) * a + quad.trace() * b)
-            / (r1 * r2)
-            * (-kr).exp()
+        let trace = quad.trace();
+        let f = 3.0 / r2 * (r.transpose() * quad * r)[0] - trace;
+
+        0.5 / (r1 * r2)
+            * if let Some(kappa) = self.kappa() {
+                let kr = kappa * r1;
+                let kr2 = kr * kr;
+                let a = srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
+                    + q * q / 3.0 * srf2;
+                let b = (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
+                (f * a + trace * b) * (-kr).exp()
+            } else {
+                let a = srf0 - q * srf1 + q * q / 3.0 * srf2;
+                let b = (srf2 * q * q) / 3.0;
+                f * a + trace * b
+            }
     }
 }
 
