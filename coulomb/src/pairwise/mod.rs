@@ -166,14 +166,14 @@ pub trait MultipolePotential: ShortRangeFunction + crate::Cutoff {
         }
         let r1 = r2.sqrt(); // |r|
         let q = r1 / self.cutoff();
-        if let Some(kappa) = self.kappa() {
-            let kr = kappa * r1;
-            dipole.dot(r) / (r2 * r1)
-                * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
-                * (-kr).exp()
-        } else {
-            dipole.dot(r) / (r2 * r1) * self.short_range_f0(q)
-        }
+        let srf0 = self.short_range_f0(q);
+        let srf1 = self.short_range_f1(q);
+        dipole.dot(r) / (r2 * r1)
+            * if let Some(kappa) = self.kappa() {
+                (srf0 * (1.0 + kappa * r1) - q * srf1) * (-kappa * r1).exp()
+            } else {
+                srf0 - q * srf1
+            }
     }
 
     /// Electrostatic potential from a point quadrupole.
@@ -217,14 +217,14 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         }
         let r1 = r.norm();
         let q = r1 / self.cutoff();
-        if let Some(kappa) = self.kappa() {
-            let kr = kappa * r1;
-            charge * r / (r2 * r1)
-                * (self.short_range_f0(q) * (1.0 + kr) - q * self.short_range_f1(q))
-                * (-kr).exp()
-        } else {
-            charge * r / (r2 * r1) * self.short_range_f0(q)
-        }
+        let srf0 = self.short_range_f0(q);
+        let srf1 = self.short_range_f1(q);
+        charge * r / (r2 * r1)
+            * if let Some(kappa) = self.kappa() {
+                ((1.0 + kappa * r1) * srf0 - q * srf1) * (-kappa * r1).exp()
+            } else {
+                srf0 - q * srf1
+            }
     }
 
     /// Electrostatic field from point dipole.
@@ -252,7 +252,7 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let srf1 = self.short_range_f1(q);
         let srf2 = self.short_range_f2(q);
         let mut field = (3.0 * dipole.dot(r) * r / r2 - dipole) * r3_inv;
-
+        
         if let Some(kappa) = self.kappa() {
             let kr = kappa * r1;
             let kr2 = kr * kr;
@@ -261,7 +261,9 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
             let field_i = dipole * r3_inv * (srf0 * kr2 - 2.0 * kr * q * srf1 + srf2 * q * q) / 3.0;
             (field + field_i) * (-kr).exp()
         } else {
-            field * srf0 + dipole * r3_inv * q * q * srf2 / 3.0
+            field *= srf0 - q * srf1 + q * q / 3.0 * srf2;
+            let field_i = dipole * r3_inv * q * q * srf2 / 3.0;
+            field + field_i
         }
     }
     /// Electrostatic field from point quadrupole.
@@ -292,12 +294,32 @@ pub trait MultipoleField: ShortRangeFunction + crate::Cutoff {
         let s1 = self.short_range_f1(q);
         let s2 = self.short_range_f2(q);
         let s3 = self.short_range_f3(q);
-        let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
-            * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
-        let field_i = quadfactor * r_hat / r4
-            * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
-                - q2 * q * s3);
-        0.5 * (field_d + field_i) * (-kr).exp()
+
+        if kr == 0.0 && kr2 == 0.0 {
+            let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
+                / r4
+                * (s0 - q * s1)
+                * (1.0 + q2 / 3.0 * s2);
+            let field_i =
+                quadfactor * r_hat / r4 * (s0 * kr2 - q * s1 * 2.0 * kr + s2 * q2 - q2 * q * s3);
+            return 0.5 * (field_d + field_i);
+        } else {
+            let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh)
+                / r4
+                * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
+            let field_i = quadfactor * r_hat / r4
+                * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr
+                    + s2 * (1.0 + 3.0 * kr) * q2
+                    - q2 * q * s3);
+            return 0.5 * (field_d + field_i) * (-kr).exp();
+        }
+
+        // let field_d = 3.0 * ((5.0 * quadfactor - quad.trace()) * r_hat - quadrh - quad_trh) / r4
+        //     * (s0 * (1.0 + kr + kr2 / 3.0) - q * s1 * (1.0 + 2.0 / 3.0 * kr) + q2 / 3.0 * s2);
+        // let field_i = quadfactor * r_hat / r4
+        //     * (s0 * (1.0 + kr) * kr2 - q * s1 * (3.0 * kr + 2.0) * kr + s2 * (1.0 + 3.0 * kr) * q2
+        //         - q2 * q * s3);
+        // 0.5 * (field_d + field_i) * (-kr).exp()
     }
 }
 

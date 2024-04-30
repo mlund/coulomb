@@ -348,25 +348,28 @@ impl<const C: i32, const D: i32> core::fmt::Display for Poisson<C, D> {
 
 #[test]
 fn test_poisson() {
-    let pot = Stenqvist::new(29.0, None);
+    use crate::{Matrix3, Vector3};
+    use approx::assert_relative_eq;
+    let cutoff = 29.0;
+    let pot = Stenqvist::new(cutoff, None);
     let eps = 1e-9; // Set epsilon for approximate equality
 
     // Test Stenqvist short-range function
-    approx::assert_relative_eq!(pot.short_range_f0(0.5), 0.15625, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f1(0.5), -1.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f2(0.5), 3.75, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f3(0.5), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f3(0.6), -5.76, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f1(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f2(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f3(1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f0(0.0), 1.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f1(0.0), -2.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f2(0.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f3(0.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f0(0.5), 0.15625, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f1(0.5), -1.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f2(0.5), 3.75, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(0.5), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(0.6), -5.76, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f0(1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f1(1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f2(1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f0(0.0), 1.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f1(0.0), -2.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f2(0.0), 0.0, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(0.0), 0.0, epsilon = eps);
 
-    let pot = Stenqvist::new(29.0, Some(23.0));
+    let pot = Stenqvist::new(cutoff, Some(23.0));
     approx::assert_relative_eq!(
         pot.self_energy(&[2.0], &[0.0]),
         -0.03037721287,
@@ -379,16 +382,82 @@ fn test_poisson() {
     );
 
     // Test Fanougarkis short-range function
-    let pot = Fanourgakis::new(29.0, None);
-    approx::assert_relative_eq!(pot.short_range_f0(0.5), 0.19921875, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f1(0.5), -1.1484375, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f2(0.5), 3.28125, epsilon = eps);
-    approx::assert_relative_eq!(pot.short_range_f3(0.5), 6.5625, epsilon = eps);
+    let pot = Fanourgakis::new(cutoff, None);
+    assert_relative_eq!(pot.short_range_f0(0.5), 0.19921875, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f1(0.5), -1.1484375, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f2(0.5), 3.28125, epsilon = eps);
+    assert_relative_eq!(pot.short_range_f3(0.5), 6.5625, epsilon = eps);
 
     assert_eq!(
         pot.to_string(),
         "Poisson: 𝐶 = 4, 𝐷 = 3, 𝑟✂ = 29.0 Å <https://doi.org/10.1063/1.3216520>"
-    )
+    );
 
-    // Test
+    let pot43 = Poisson::<4, 3>::new(cutoff, None);
+    let zA = 2.0;
+    let r = Vector3::new(23.0, 0.0, 0.0); // distance vector
+    let rq = Vector3::new(
+        5.75 * 6.0_f64.sqrt(),
+        5.75 * 2.0_f64.sqrt(),
+        11.5 * 2.0_f64.sqrt(),
+    );
+    let rh = r.normalize();
+    let muA = Vector3::new(19.0, 7.0, 11.0);
+    let muB = Vector3::new(13.0, 17.0, 5.0);
+    let quadA = Matrix3::new(3.0, 7.0, 8.0, 5.0, 9.0, 6.0, 2.0, 1.0, 4.0);
+
+    // Test potentials
+    assert_relative_eq!(pot43.ion_potential(zA, cutoff), 0.0, epsilon = eps);
+    assert_relative_eq!(
+        pot43.ion_potential(zA, r.norm()),
+        0.0009430652121,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.dipole_potential(&muA, &rh.scale(cutoff)),
+        0.0,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.dipole_potential(&muA, &r),
+        0.005750206554,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.quadrupole_potential(&quadA, &rq),
+        0.000899228165,
+        epsilon = eps
+    );
+    assert_relative_eq!(
+        pot43.quadrupole_potential(&quadA, &rq.scale(cutoff / 23.0)),
+        0.0,
+        epsilon = eps
+    );
+
+    // Test fields
+    assert_relative_eq!(
+        pot43.ion_field(zA, &rh.scale(cutoff)).norm(),
+        0.0,
+        epsilon = eps
+    );
+    let e_ion = pot43.ion_field(zA, &r);
+    assert_relative_eq!(e_ion[0], 0.0006052849004, epsilon = eps);
+    assert_relative_eq!(e_ion.norm(), 0.0006052849004, epsilon = eps);
+    assert_relative_eq!(
+        pot43.dipole_field(&muA, &rh.scale(cutoff)).norm(),
+        0.0,
+        epsilon = eps
+    );
+    let e_dipole = pot43.dipole_field(&muA, &r);
+    assert_relative_eq!(e_dipole[0], 0.002702513754, epsilon = eps);
+    assert_relative_eq!(e_dipole[1], -0.00009210857180, epsilon = eps);
+    assert_relative_eq!(e_dipole[2], -0.0001447420414, epsilon = eps);
+    let e_quadrupole = pot43.quadrupole_field(&quadA, &r);
+    // assert_relative_eq!(e_quadrupole[0], 0.00001919309993, epsilon = eps);
+    // assert_relative_eq!(e_quadrupole[1], -0.00004053806958, epsilon = eps);
+    // assert_relative_eq!(e_quadrupole[2], -0.00003378172465, epsilon = eps);
+    // let e_multipole = pot43.multipole_field(zA, &muA, &quadA, &r);
+    // assert_relative_eq!(e_multipole[0], 0.003326991754330, epsilon = eps);
+    // assert_relative_eq!(e_multipole[1], -0.00013264664138, epsilon = eps);
+    // assert_relative_eq!(e_multipole[2], -0.00017852376605, epsilon = eps);
 }
