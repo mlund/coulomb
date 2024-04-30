@@ -72,16 +72,19 @@ impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 /// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520),
 ///
 
+enum Screening {
+    None,
+    Some{debye_length: f64, reduced_kappa: f64, reduced_kappa_squared: f64, yukawa_denom: f64},
+}
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Poisson<const C: i32, const D: i32> {
     cutoff: f64,
-    debye_length: f64,
+    debye_length: Option<f64>,
     _has_dipolar_selfenergy: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
-    reduced_kappa: f64,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    use_yukawa_screening: bool,
+    reduced_kappa: Option<f64>,
     #[cfg_attr(feature = "serde", serde(skip))]
     reduced_kappa_squared: f64,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -134,21 +137,19 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
         if C < 2 {
             has_dipolar_selfenergy = false;
         }
-        let mut reduced_kappa = 0.0;
-        let mut use_yukawa_screening = false;
+        let mut reduced_kappa: Option<f64> = None;
         let mut reduced_kappa_squared = 0.0;
         let mut yukawa_denom = 0.0;
         let mut binom_cdc = 0.0;
 
         if let Some(debye_length) = debye_length {
-            reduced_kappa = cutoff / debye_length;
-            if reduced_kappa.abs() > 1e-6 {
-                use_yukawa_screening = true;
-                reduced_kappa_squared = reduced_kappa * reduced_kappa;
-                yukawa_denom = 1.0 / (1.0 - (2.0 * reduced_kappa).exp());
-                let _a1 = -f64::from(C + D) / f64::from(C);
-                binom_cdc = f64::from(binomial(C + D, C) * D);
-            }
+            reduced_kappa = Some(cutoff / debye_length);
+        }
+        if let Some(reduced_kappa) = reduced_kappa {
+            reduced_kappa_squared = reduced_kappa * reduced_kappa;
+            yukawa_denom = 1.0 / (1.0 - (2.0 * reduced_kappa).exp());
+            let _a1 = -f64::from(C + D) / f64::from(C);
+            binom_cdc = f64::from(binomial(C + D, C) * D);
         }
         if D != -C {
             binom_cdc = f64::from(binomial(C + D, C) * D);
@@ -156,10 +157,9 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         Poisson {
             cutoff,
-            debye_length: debye_length.unwrap_or(f64::INFINITY),
+            debye_length,
             _has_dipolar_selfenergy: has_dipolar_selfenergy,
             reduced_kappa,
-            use_yukawa_screening,
             reduced_kappa_squared,
             yukawa_denom,
             binom_cdc,
@@ -188,21 +188,13 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
     };
 
     fn kappa(&self) -> Option<f64> {
-        if self.debye_length.is_normal() {
-            Some(1.0 / self.debye_length)
-        } else {
-            None
-        }
+        self.debye_length.map(f64::recip)
     }
     fn short_range_f0(&self, q: f64) -> f64 {
         if D == -C {
             return 1.0;
         }
-        let qp = if self.use_yukawa_screening {
-            (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom
-        } else {
-            q
-        };
+        let qp = self.reduced_kappa.map_or(q, |k| (1.0 - (2.0 * k * q).exp()) * self.yukawa_denom);
 
         if D == 0 && C == 1 {
             return 1.0 - qp;
@@ -224,10 +216,11 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         }
         let mut qp = q;
         let mut dqpdq = 1.0;
-        if self.use_yukawa_screening {
-            let exp2kq = (2.0 * self.reduced_kappa * q).exp();
+        if let Some(reduced_kappa) = self.reduced_kappa {
+        // if self.use_yukawa_screening {
+            let exp2kq = (2.0 * reduced_kappa * q).exp();
             qp = (1.0 - exp2kq) * self.yukawa_denom;
-            dqpdq = -2.0 * self.reduced_kappa * exp2kq * self.yukawa_denom;
+            dqpdq = -2.0 * reduced_kappa * exp2kq * self.yukawa_denom;
         }
         let mut tmp1 = 1.0;
         let mut tmp2 = 0.0;
@@ -252,15 +245,16 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut d2qpdq2 = 0.0;
         let mut dsdqp = 0.0;
         // todo: use Option<f64> for kappa
-        if self.use_yukawa_screening {
-            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
+        if let Some(reduced_kappa) = self.reduced_kappa {
+        // if self.use_yukawa_screening {
+            qp = (1.0 - (2.0 * reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0
-                * self.reduced_kappa
-                * (2.0 * self.reduced_kappa * q).exp()
+                * reduced_kappa
+                * (2.0 * reduced_kappa * q).exp()
                 * self.yukawa_denom;
             d2qpdq2 = -4.0
                 * self.reduced_kappa_squared
-                * (2.0 * self.reduced_kappa * q).exp()
+                * (2.0 * reduced_kappa * q).exp()
                 * self.yukawa_denom;
             let mut tmp1 = 1.0;
             let mut tmp2 = 0.0;
@@ -289,20 +283,21 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         let mut d2sdqp2 = 0.0;
         let mut dsdqp = 0.0;
         // todo: use Option<f64> for kappa
-        if self.use_yukawa_screening {
-            qp = (1.0 - (2.0 * self.reduced_kappa * q).exp()) * self.yukawa_denom;
+        if let Some(reduced_kappa) = self.reduced_kappa {
+        // if self.use_yukawa_screening {
+            qp = (1.0 - (2.0 * reduced_kappa * q).exp()) * self.yukawa_denom;
             dqpdq = -2.0
-                * self.reduced_kappa
-                * (2.0 * self.reduced_kappa * q).exp()
+                * reduced_kappa
+                * (2.0 * reduced_kappa * q).exp()
                 * self.yukawa_denom;
             d2qpdq2 = -4.0
                 * self.reduced_kappa_squared
-                * (2.0 * self.reduced_kappa * q).exp()
+                * (2.0 * reduced_kappa * q).exp()
                 * self.yukawa_denom;
             d3qpdq3 = -8.0
                 * self.reduced_kappa_squared
-                * self.reduced_kappa
-                * (2.0 * self.reduced_kappa * q).exp()
+                * reduced_kappa
+                * (2.0 * reduced_kappa * q).exp()
                 * self.yukawa_denom;
             d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
             let mut tmp1 = 1.0;
@@ -324,9 +319,12 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
 
     fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
         let mut c1: f64 = -0.5 * (C + D) as f64 / C as f64;
-        if self.use_yukawa_screening {
-            c1 = c1 * -2.0 * self.reduced_kappa * self.yukawa_denom;
+        if self.reduced_kappa.is_some() {
+            c1 = c1 * -2.0 * self.reduced_kappa.unwrap() * self.yukawa_denom;
         }
+        // if self.use_yukawa_screening {
+        //     c1 = c1 * -2.0 * self.reduced_kappa * self.yukawa_denom;
+        // }
         SelfEnergyPrefactors {
             monopole: Some(c1),
             dipole: None,
