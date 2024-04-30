@@ -96,12 +96,11 @@ impl Medium {
         if molality < 0.0 {
             anyhow::bail!("Molarity must be positive")
         }
-        if let Some((salt, _)) = &self.salt {
-            self.salt = Some((salt.clone(), molality));
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Cannot set molarity without a salt"))
-        }
+        let Some((salt, _)) = &self.salt else {
+            anyhow::bail!("Cannot set molarity without a salt")
+        };
+        self.salt = Some((salt.clone(), molality));
+        Ok(())
     }
     /// Bjerrum length in angstrom, lB = e²/4πεkT
     pub fn bjerrum_length(&self) -> f64 {
