@@ -29,7 +29,7 @@ const XMAX: f64 = 15.0;
 const YMAX: f64 = XMAX / ASPECT_RATIO;
 
 /// A particle with charge, dipole moment, position, and radius
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Particle {
     charge: f64,
     dipole: Vector3,
@@ -39,13 +39,13 @@ struct Particle {
 
 impl Particle {
     /// Potential at a given position due to the particle (ion and dipole contributions)
-    pub fn potential<T: MultipolePotential>(&self, pos: &Vector3, scheme: &T) -> f64 {
+    ///
+    /// Returns `None` if the position is inside the particle.
+    pub fn potential<T: MultipolePotential>(&self, pos: &Vector3, scheme: &T) -> Option<f64> {
         let r = pos - self.pos;
-        if r.norm() < self.radius {
-            0.0
-        } else {
+        (r.norm() > self.radius).then(|| {
             scheme.ion_potential(self.charge, r.norm()) + scheme.dipole_potential(&self.dipole, &r)
-        }
+        })
     }
 }
 
@@ -75,23 +75,27 @@ fn main() {
                 h as f64 * YMAX / HEIGHT as f64,
                 0.0,
             );
-            let pot = p1.potential(&pos, &scheme) + p2.potential(&pos, &scheme);
-            data.push((w, h, pot));
+            let (Some(pot1), Some(pot2)) =
+                (p1.potential(&pos, &scheme), p2.potential(&pos, &scheme))
+            else {
+                continue;
+            };
+            data.push((w, h, pot1 + pot2));
         }
     }
 
-    // Absolute maximum Z values
-    let max_z = data
+    // Maximum absolute potential value
+    let max = data
         .iter()
-        .map(|(_, _, z)| z.abs())
+        .map(|(_, _, p)| p.abs())
         .fold(f64::NEG_INFINITY, f64::max);
 
     // New image and color gradient
     let mut img = RgbaImage::new(WIDTH, HEIGHT);
     let gradient = colorgrad::rd_bu();
 
-    for &(w, h, z) in &data {
-        let color = gradient.at(remap(z, -max_z, max_z, 0.0, 1.0)).to_rgba8();
+    for &(w, h, p) in &data {
+        let color = gradient.at(remap(p, -max, max, 0.0, 1.0)).to_rgba8();
         img.put_pixel(w, h, color.into());
     }
     img.save("potential.png").unwrap();

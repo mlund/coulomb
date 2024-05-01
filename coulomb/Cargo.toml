@@ -33,3 +33,4 @@ colorgrad = "0.6"
 # export RUSTDOCFLAGS="--html-in-header coulomb/src/docs-header.html"
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "coulomb/src/docs-header.html"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
