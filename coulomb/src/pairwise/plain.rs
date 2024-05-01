@@ -44,6 +44,16 @@ pub struct Plain {
     kappa: Option<f64>,
 }
 
+impl Default for Plain {
+    /// The default is infinite cutoff radius and no screening
+    fn default() -> Self {
+        Self {
+            cutoff: f64::INFINITY,
+            kappa: None,
+        }
+    }
+}
+
 impl core::fmt::Display for Plain {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Plain Coulomb: 𝑟✂ = {:.1} Å", self.cutoff)?;

@@ -3,7 +3,7 @@ name = "coulomb"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.77"
-description = "Support library for electrolytes and electrostatic interactions"
+description = "Library for electrolytes and electrostatic interactions"
 license = "Apache-2.0"
 repository = "https://github.com/mlund/faunus-rs"
 authors = ["Mikael Lund"]
@@ -25,6 +25,8 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
 approx = "0.5"
+image = "0.25"
+colorgrad = "0.6"
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation:
