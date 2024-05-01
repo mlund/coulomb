@@ -65,6 +65,9 @@ impl Plain {
             kappa: debye_length.map(f64::recip),
         }
     }
+    pub fn new_without_salt(cutoff: f64) -> Self {
+        Self::new(cutoff, None)
+    }
 }
 
 impl crate::Cutoff for Plain {

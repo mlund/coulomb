@@ -30,9 +30,18 @@ The main purpose is to offer support for molecular simulation software.
 - Multipole expansion for _energies_, _forces_, _fields_ between ions, dipoles, and quadrupoles.
 - Extensively unit tested and may serve as reference for other implementations or approximations.
 
-# Example
+This is largely a Rust rewrite and extension of the
+[CoulombGalore](https://zenodo.org/doi/10.5281/zenodo.3522058) C++ library.
 
-## Electrolytes
+# Examples
+
+## Dielectric Media and Electrolytes
+
+Simple polynomial models are provided to obtain the relative permittivity or a `Medium` as a function
+of temperature.
+For working with the _ionic strength_, `Salt` of arbitrary valency can be given and the
+required stoichiometry is automatically worked out.
+
 ~~~ rust
 use coulomb::{Medium, Salt};
 let molarity = 0.1;
@@ -42,6 +51,22 @@ assert_eq!(medium.ionic_strength()?, 0.3);             // mol/l
 assert_eq!(medium.debye_length()?, 5.548902662386284); // angstrom
 ~~~
 
-# Electrostatic interactions 
+## Multipolar Interactions
+
+All pairwise _schemes_ support calculation of _potential_, _energy_, _field_, _force_ from or between multipolar particles, up to second order (ion-ion, ion-dipole, dipole-dipole; ion-quadrupole).
+Most scheme can be evaluated with or without a Debye-Hückel screening length.
+
 ~~~ rust
+use coulomb::pairwise::*;
+let (cutoff, debye_length) = (f64::infinity, None); // No cut-off; no Debye screening length
+let scheme = Plain::new(cutoff, debye_length);      // Vanilla Coulomb scheme, 𝒮(𝑞)=1
+
+let z = 1.0;                                        // point charge, 𝑧 
+let r = Vector3::new(3.0, 5.0, 0.0);                // distance vector, 𝒓
+let ion_pot = scheme.ion_potential(z, r.norm());    // potential |𝒓| away from charge 
+assert_eq!(ion_pot, charge / r.norm());
+
+let mu = Vector3::new(0.2, 3.0, -1.0);              // point dipole, 𝝁
+let dipole_pot = scheme.dipole_potential(&mu, &r);  // potential 𝒓 away from dipole
+let energy = scheme.ion_dipole_energy(z, &mu, &r);  // interaction energy assuming 𝒓 = 𝒓(𝜇) - 𝒓(𝑧)
 ~~~
