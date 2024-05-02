@@ -50,19 +50,20 @@ impl Particle {
 }
 
 fn main() {
-    let p1 = Particle {
-        charge: -3.0,
-        dipole: Vector3::zeros(),
-        pos: Vector3::new(XMAX / 2.0 - 3.0, YMAX / 2.0 - 1.0, 0.0),
-        radius: 1.5,
-    };
-
-    let p2 = Particle {
-        charge: 0.0,
-        dipole: Vector3::new(-5.0, 5.0, 0.0),
-        pos: Vector3::new(XMAX / 2.0 + 3.0, YMAX / 2.0 + 1.0, 0.0),
-        radius: 1.5,
-    };
+    let particles = [
+        Particle {
+            charge: -3.0,
+            dipole: Vector3::zeros(),
+            pos: Vector3::new(XMAX / 2.0 - 3.0, YMAX / 2.0 - 1.0, 0.0),
+            radius: 1.5,
+        },
+        Particle {
+            charge: 0.0,
+            dipole: Vector3::new(-5.0, 5.0, 0.0),
+            pos: Vector3::new(XMAX / 2.0 + 3.0, YMAX / 2.0 + 1.0, 0.0),
+            radius: 1.5,
+        },
+    ];
 
     let mut data = Vec::with_capacity((WIDTH * HEIGHT) as usize); // w, h, potential
     let scheme = Plain::default(); // vanilla Coulomb scheme, S(q)=1
@@ -75,12 +76,14 @@ fn main() {
                 h as f64 * YMAX / HEIGHT as f64,
                 0.0,
             );
-            let (Some(pot1), Some(pot2)) =
-                (p1.potential(&pos, &scheme), p2.potential(&pos, &scheme))
-            else {
-                continue;
-            };
-            data.push((w, h, pot1 + pot2));
+            let pot: Vec<f64> = particles
+                .iter()
+                .filter_map(|p| p.potential(&pos, &scheme))
+                .collect();
+            if pot.len() == particles.len() {
+                // only if outside *all* particles
+                data.push((w, h, pot.iter().sum::<f64>()));
+            }
         }
     }
 
