@@ -74,7 +74,7 @@ pub use field::MultipoleField;
 /// a long-range part.
 pub trait ShortRangeFunction {
     /// URL to the original article describing the short-range function.
-    const URL: &'static str;
+    fn url() -> &'static str;
 
     /// Inverse Debye screening length.
     ///

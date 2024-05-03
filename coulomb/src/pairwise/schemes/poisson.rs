@@ -172,18 +172,20 @@ impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
 }
 
 impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
-    const URL: &'static str = match (C, D) {
-        (1, -1) => "https://doi.org/msxd",             // plain
-        (1, 0) => "https://doi.org/10.1063/1.478738",  // wolf
-        (1, 1) => "https://doi.org/10/fp959p",         // fennell
-        (1, 2) => "https://doi.org/10/csh8bg",         // kale
-        (1, 3) => "https://doi.org/10.1021/ct300961",  // mccann
-        (2, 1) => "https://doi.org/10.1063/1.3582791", // fukuda
-        (2, 2) => "https://doi.org/dbpbts",            // markland
-        (3, 3) => "https://doi.org/10/c5fr",           // stenqvist
-        (4, 3) => "https://doi.org/10.1063/1.3216520", // fanourgakis
-        _ => "https://doi.org/c5fr",                   // generic poisson
-    };
+    fn url() -> &'static str {
+        match (C, D) {
+            (1, -1) => "https://doi.org/msxd",             // plain
+            (1, 0) => "https://doi.org/10.1063/1.478738",  // wolf
+            (1, 1) => "https://doi.org/10/fp959p",         // fennell
+            (1, 2) => "https://doi.org/10/csh8bg",         // kale
+            (1, 3) => "https://doi.org/10.1021/ct300961",  // mccann
+            (2, 1) => "https://doi.org/10.1063/1.3582791", // fukuda
+            (2, 2) => "https://doi.org/dbpbts",            // markland
+            (3, 3) => "https://doi.org/10/c5fr",           // stenqvist
+            (4, 3) => "https://doi.org/10.1063/1.3216520", // fanourgakis
+            _ => "https://doi.org/c5fr",                   // generic poisson
+        }
+    }
 
     fn kappa(&self) -> Option<f64> {
         self.screening.as_ref().map(|s| s.kappa)
@@ -327,7 +329,7 @@ impl<const C: i32, const D: i32> core::fmt::Display for Poisson<C, D> {
         if let Some(debye_length) = self.kappa().map(f64::recip) {
             write!(f, ", λᴰ = {:.1} Å", debye_length)?;
         }
-        write!(f, " <{}>", Self::URL)?;
+        write!(f, " <{}>", Self::url())?;
         Ok(())
     }
 }

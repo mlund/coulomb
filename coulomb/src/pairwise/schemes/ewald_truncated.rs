@@ -74,7 +74,9 @@ impl Cutoff for EwaldTruncated {
 }
 
 impl ShortRangeFunction for EwaldTruncated {
-    const URL: &'static str = "https://doi.org/dsd6";
+    fn url() -> &'static str {
+        "https://doi.org/dsd6"
+    }
 
     fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
         let c1 = -self.eta * Self::FRAC_1_SQRT_PI * (1.0 - self.exp_minus_eta2) * self.f0;

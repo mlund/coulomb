@@ -55,7 +55,7 @@ impl core::fmt::Display for RealSpaceEwald {
         if let Some(zeta) = self.zeta {
             write!(f, ", 𝜻 = {:.1}", zeta)?;
         }
-        write!(f, " <{}>", Self::URL)?;
+        write!(f, " <{}>", Self::url())?;
         Ok(())
     }
 }
@@ -96,7 +96,9 @@ impl crate::Cutoff for RealSpaceEwald {
 }
 
 impl ShortRangeFunction for RealSpaceEwald {
-    const URL: &'static str = "https://doi.org/fcjts8";
+    fn url() -> &'static str {
+        "https://doi.org/fcjts8"
+    }
 
     /// The inverse Debye length if salt is present, otherwise `None`.
     #[inline]

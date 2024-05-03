@@ -51,7 +51,7 @@ impl Display for ReactionField {
             } else {
                 "unshifted"
             },
-            Self::URL
+            Self::url()
         )?;
         Ok(())
     }
@@ -113,7 +113,9 @@ impl Cutoff for ReactionField {
 }
 
 impl ShortRangeFunction for ReactionField {
-    const URL: &'static str = "https://doi.org/dscmwg";
+    fn url() -> &'static str {
+        "https://doi.org/dscmwg"
+    }
 
     fn kappa(&self) -> Option<f64> {
         None

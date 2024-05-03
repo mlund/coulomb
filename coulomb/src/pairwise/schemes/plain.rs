@@ -60,7 +60,7 @@ impl core::fmt::Display for Plain {
         if let Some(debye_length) = self.kappa.map(f64::recip) {
             write!(f, ", λᴰ = {:.1} Å", debye_length)?;
         }
-        write!(f, " <{}>", Self::URL)?;
+        write!(f, " <{}>", Self::url())?;
         Ok(())
     }
 }
@@ -88,7 +88,9 @@ impl crate::Cutoff for Plain {
 }
 
 impl ShortRangeFunction for Plain {
-    const URL: &'static str = "https://doi.org/msxd";
+    fn url() -> &'static str {
+        "https://doi.org/msxd"
+    }
 
     #[inline]
     fn kappa(&self) -> Option<f64> {
