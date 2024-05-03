@@ -31,7 +31,7 @@ use core::fmt::{Display, Formatter};
 ///
 /// ## Pure water
 /// ~~~
-/// use coulomb::{Medium, Salt, DebyeLength, RelativePermittivity, IonicStrength};
+/// use coulomb::{Medium, DebyeLength, IonicStrength};
 /// let medium = Medium::neat_water(298.15);
 /// assert_eq!(medium.permittivity(), 78.35565171480539);
 /// assert!(medium.ionic_strength().is_none());
@@ -39,7 +39,7 @@ use core::fmt::{Display, Formatter};
 /// ~~~
 /// ## Salty water
 /// ~~~
-/// # use coulomb::{Medium, Salt, DebyeLength, IonicStrength};
+/// use coulomb::{Medium, Salt, DebyeLength, IonicStrength};
 /// let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
 /// approx::assert_abs_diff_eq!(medium.ionic_strength().unwrap(), 0.3);
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
