@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{
+use crate::pairwise::{
     MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
     ShortRangeFunction,
 };

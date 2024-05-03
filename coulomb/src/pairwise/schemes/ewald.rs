@@ -15,10 +15,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use super::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
-};
 use crate::math::erfc_x;
+use crate::pairwise::{
+    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
+    ShortRangeFunction,
+};
 #[cfg(test)]
 use approx::assert_relative_eq;
 #[cfg(feature = "serde")]
@@ -154,7 +155,7 @@ impl ShortRangeFunction for RealSpaceEwald {
         }
     }
 
-    fn self_energy_prefactors(&self) -> super::SelfEnergyPrefactors {
+    fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
         let (c1, c2) = if let Some(zeta) = self.zeta {
             let c1 = -self.eta / Self::SQRT_PI
                 * (f64::exp(-zeta.powi(2) / 4.0 / self.eta.powi(2))
@@ -170,7 +171,7 @@ impl ShortRangeFunction for RealSpaceEwald {
             let c2 = -self.eta.powi(3) / Self::SQRT_PI * 2.0 / 3.0;
             (c1, c2)
         };
-        super::SelfEnergyPrefactors {
+        SelfEnergyPrefactors {
             monopole: Some(c1),
             dipole: Some(c2),
         }
