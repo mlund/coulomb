@@ -32,6 +32,40 @@ pub trait RelativePermittivity: DynClone {
 
 dyn_clone::clone_trait_object!(RelativePermittivity);
 
+/// Temperature independent relative permittivity, εᵣ = constant
+///
+/// # Example
+/// ~~~
+/// use coulomb::{ConstantPermittivity, RelativePermittivity};
+/// let dielec = ConstantPermittivity::new(2.0);
+/// assert_eq!(dielec.permittivity(298.15).unwrap(), 2.0);
+/// assert!(dielec.temperature_is_ok(f64::INFINITY));
+///
+/// let vacuum = ConstantPermittivity::vacuum();
+/// assert_eq!(vacuum.permittivity(298.15).unwrap(), 1.0);
+/// ~~~
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct ConstantPermittivity {
+    permittivity: f64,
+}
+
+impl ConstantPermittivity {
+    /// New constant permittivity
+    pub const fn new(permittivity: f64) -> Self {
+        Self { permittivity }
+    }
+    /// New constant permittivity for vacuum, εᵣ = 1.0
+    pub const fn vacuum() -> Self {
+        Self::new(1.0)
+    }
+}
+
+impl RelativePermittivity for ConstantPermittivity {
+    fn permittivity(&self, _: f64) -> Result<f64> {
+        Ok(self.permittivity)
+    }
+}
+
 /// Empirical model for the temperature dependent relative permittivity, εᵣ(𝑇),
 ///
 /// For more information, see

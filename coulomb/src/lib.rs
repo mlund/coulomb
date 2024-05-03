@@ -96,7 +96,7 @@ pub mod reciprocal;
 mod salt;
 mod spline;
 pub use medium::Medium;
-pub use permittivity::{EmpiricalPermittivity, RelativePermittivity};
+pub use permittivity::{ConstantPermittivity, EmpiricalPermittivity, RelativePermittivity};
 pub use salt::Salt;
 
 use anyhow::Result;
