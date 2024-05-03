@@ -14,9 +14,11 @@
 // without warranties or conditions of any kind, either express or implied.
 // See the license for the specific language governing permissions and
 // limitations under the license.
-
 use super::ShortRangeFunction;
 use crate::{Cutoff, Matrix3, Vector3};
+
+#[cfg(feature = "uom")]
+use crate::units::*;
 
 /// Electric potential from point multipoles
 ///
@@ -33,6 +35,22 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
             * self.short_range_f0(q)
             * self.kappa().map_or(1.0, |kappa| (-kappa * distance).exp())
     }
+
+    /// Ion-ion energy with units
+    ///
+    /// # Note
+    ///
+    /// Assumes that the cutoff distance is in angstrom!
+    #[cfg(feature = "uom")]
+    fn ion_potential_si(&self, charge: ElectricCharge, distance: Length) -> ElectricPotential {
+        let z = charge.get::<elementary_charge>();
+        let r = distance.get::<angstrom>();
+        ElectricChargeLinearDensity::new::<valence_per_angstrom>(self.ion_potential(z, r))
+            / (4.0
+                * std::f64::consts::PI
+                * ElectricPermittivity::new::<farad_per_meter>(8.854187817e-12))
+    }
+
     /// Electrostatic potential from a point dipole.
     ///
     /// Parameters:

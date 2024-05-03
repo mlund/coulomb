@@ -17,6 +17,9 @@
 
 //! Multipole interaction energies
 
+#[cfg(feature = "uom")]
+use crate::units::*;
+
 use super::{MultipoleField, MultipolePotential};
 use crate::{Matrix3, Vector3};
 
@@ -54,6 +57,17 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// where Phi(z1,r) is the potential from ion 1.
     fn ion_ion_energy(&self, charge1: f64, charge2: f64, r: f64) -> f64 {
         charge2 * self.ion_potential(charge1, r)
+    }
+
+    #[cfg(feature = "uom")]
+    /// Interaction energy between two point charges with units
+    fn ion_ion_energy_si(
+        &self,
+        charge1: ElectricCharge,
+        charge2: ElectricCharge,
+        distance: Length,
+    ) -> Energy {
+        charge1 * self.ion_potential_si(charge2, distance)
     }
 
     /// Interaction energy between a point charge and a point dipole

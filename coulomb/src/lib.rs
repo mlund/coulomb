@@ -80,6 +80,13 @@
 #[cfg(test)]
 extern crate approx;
 
+#[cfg(feature = "uom")]
+#[macro_use]
+#[cfg(feature = "uom")]
+extern crate uom;
+#[cfg(feature = "uom")]
+mod units;
+
 /// A point in 3D space
 pub type Vector3 = nalgebra::Vector3<f64>;
 /// A 3x3 matrix
