@@ -15,18 +15,10 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::pairwise::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
-    ShortRangeFunction,
-};
+use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 use num::integer::binomial;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-impl<const C: i32, const D: i32> MultipolePotential for Poisson<C, D> {}
-impl<const C: i32, const D: i32> MultipoleField for Poisson<C, D> {}
-impl<const C: i32, const D: i32> MultipoleForce for Poisson<C, D> {}
-impl<const C: i32, const D: i32> MultipoleEnergy for Poisson<C, D> {}
 
 /// # Scheme for the Poisson short-range function
 ///
@@ -336,7 +328,10 @@ impl<const C: i32, const D: i32> core::fmt::Display for Poisson<C, D> {
 
 #[test]
 fn test_poisson() {
-    use crate::{Matrix3, Vector3};
+    use crate::{
+        pairwise::{MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential},
+        Matrix3, Vector3,
+    };
     use approx::assert_relative_eq;
     let cutoff = 29.0;
     let pot = Stenqvist::new(cutoff, None);
@@ -442,6 +437,8 @@ fn test_poisson() {
         0.0,
         epsilon = eps
     );
+    let ion_field_scalar = pot.ion_field_scalar(z1, r.norm());
+    assert_relative_eq!(ion_field_scalar, e_ion.norm(), epsilon = eps);
 
     let e_dipole = pot.dipole_field(&mu1, &r);
     assert_relative_eq!(e_dipole[0], 0.002702513754, epsilon = eps);
@@ -594,6 +591,9 @@ fn test_poisson() {
         0.0,
         epsilon = eps
     );
+
+    let ion_field_scalar = pot.ion_field_scalar(z1, r.norm());
+    assert_relative_eq!(ion_field_scalar, ion_field.norm(), epsilon = eps);
 
     let dipole_field = pot.dipole_field(&mu1, &r);
     assert_relative_eq!(dipole_field[0], 0.004956265485, epsilon = eps);

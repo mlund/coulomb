@@ -17,9 +17,6 @@
 use super::ShortRangeFunction;
 use crate::{Cutoff, Matrix3, Vector3};
 
-#[cfg(feature = "uom")]
-use crate::units::*;
-
 /// Electric potential from point multipoles
 ///
 /// The units of the returned potentials is [ ( input charge ) / ( input length ) ]
@@ -34,21 +31,6 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
         charge / distance
             * self.short_range_f0(q)
             * self.kappa().map_or(1.0, |kappa| (-kappa * distance).exp())
-    }
-
-    /// Ion-ion energy with units
-    ///
-    /// # Note
-    ///
-    /// Assumes that the cutoff distance is in angstrom!
-    #[cfg(feature = "uom")]
-    fn ion_potential_si(&self, charge: ElectricCharge, distance: Length) -> ElectricPotential {
-        let z = charge.get::<elementary_charge>();
-        let r = distance.get::<angstrom>();
-        ElectricChargeLinearDensity::new::<valence_per_angstrom>(self.ion_potential(z, r))
-            / (4.0
-                * std::f64::consts::PI
-                * ElectricPermittivity::new::<farad_per_meter>(8.854187817e-12))
     }
 
     /// Electrostatic potential from a point dipole.
@@ -106,5 +88,27 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
                 let b = (srf2 * q * q) / 3.0;
                 f * a + trace * b
             }
+    }
+}
+
+#[cfg(feature = "uom")]
+pub trait MultipolePotentialSI: MultipolePotential {
+    /// Ion-ion energy with units
+    ///
+    /// # Note
+    ///
+    /// Assumes that the cutoff distance is in angstrom!
+    fn ion_potential(
+        &self,
+        charge: crate::units::ElectricCharge,
+        distance: crate::units::Length,
+    ) -> crate::units::ElectricPotential {
+        use crate::units::*;
+        let z = charge.get::<elementary_charge>();
+        let r = distance.get::<angstrom>();
+        ElectricChargeLinearDensity::new::<valence_per_angstrom>(MultipolePotential::ion_potential(self, z, r))
+            / (4.0
+                * std::f64::consts::PI
+                * ElectricPermittivity::new::<farad_per_meter>(crate::VACUUM_ELECTRIC_PERMITTIVITY))
     }
 }

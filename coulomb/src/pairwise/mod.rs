@@ -34,7 +34,7 @@
 //! ## Examples
 //! ~~~
 //! # use approx::assert_relative_eq;
-//! use coulomb::pairwise::*;
+//! use coulomb::pairwise::{Plain, MultipolePotential};
 //! let (cutoff, debye_length) = (12.0, None);
 //! let plain = Plain::new(cutoff, debye_length);
 //!
@@ -42,21 +42,33 @@
 //! assert_relative_eq!(plain.ion_potential(charge, distance), charge / distance);
 //! ~~~
 
-mod schemes;
-pub use schemes::ewald::*;
-pub use schemes::ewald_truncated::EwaldTruncated;
-pub use schemes::plain::Plain;
-pub use schemes::poisson::*;
-pub use schemes::reactionfield::ReactionField;
-
-mod force;
-pub use force::MultipoleForce;
-mod potential;
-pub use potential::MultipolePotential;
 mod energy;
-pub use energy::MultipoleEnergy;
 mod field;
-pub use field::MultipoleField;
+mod force;
+mod potential;
+mod schemes;
+pub use schemes::{
+    ewald::*, ewald_truncated::EwaldTruncated, plain::Plain, poisson::*,
+    reactionfield::ReactionField,
+};
+pub use {
+    energy::MultipoleEnergy, field::MultipoleField, force::MultipoleForce,
+    potential::MultipolePotential,
+};
+#[cfg(feature = "uom")]
+pub use {energy::MultipoleEnergySI, field::MultipoleFieldSI, potential::MultipolePotentialSI};
+
+impl<T: ShortRangeFunction + crate::Cutoff> MultipolePotential for T {}
+impl<T: ShortRangeFunction + crate::Cutoff> MultipoleField for T {}
+impl<T: MultipoleField> MultipoleForce for T {}
+impl<T: MultipolePotential + MultipoleField> MultipoleEnergy for T {}
+
+#[cfg(feature = "uom")]
+impl<T: MultipoleEnergy> MultipoleEnergySI for T {}
+#[cfg(feature = "uom")]
+impl<T: MultipoleField> MultipoleFieldSI for T {}
+#[cfg(feature = "uom")]
+impl<T: MultipolePotential> MultipolePotentialSI for T {}
 
 /// Short-range function for electrostatic interaction schemes
 ///

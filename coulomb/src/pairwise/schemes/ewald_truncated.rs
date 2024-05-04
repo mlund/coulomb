@@ -15,10 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::pairwise::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
-    ShortRangeFunction,
-};
+use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 use crate::{math::erf_x, math::erfc_x, Cutoff};
 use core::f64::consts::FRAC_2_SQRT_PI;
 
@@ -115,13 +112,10 @@ impl ShortRangeFunction for EwaldTruncated {
     }
 }
 
-impl MultipoleEnergy for EwaldTruncated {}
-impl MultipoleField for EwaldTruncated {}
-impl MultipoleForce for EwaldTruncated {}
-impl MultipolePotential for EwaldTruncated {}
-
 #[test]
 fn test_truncated_ewald() {
+    use crate::pairwise::MultipoleEnergy;
+
     use approx::assert_relative_eq;
     let cutoff = 29.0;
     let alpha = 0.1;

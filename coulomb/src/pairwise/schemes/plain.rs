@@ -15,9 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::pairwise::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, ShortRangeFunction,
-};
+use crate::pairwise::ShortRangeFunction;
 #[cfg(test)]
 use crate::{Matrix3, Vector3};
 #[cfg(test)]
@@ -25,11 +23,6 @@ use approx::assert_relative_eq;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-impl MultipolePotential for Plain {}
-impl MultipoleField for Plain {}
-impl MultipoleForce for Plain {}
-impl MultipoleEnergy for Plain {}
 
 /// Scheme for vanilla Coulomb interactions, $S(q)=1$.
 ///
@@ -116,6 +109,7 @@ impl ShortRangeFunction for Plain {
 
 #[test]
 fn test_coulomb() {
+    use crate::pairwise::{MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential};
     let cutoff: f64 = 29.0; // cutoff distance
     let z1 = 2.0; // charge
     let z2 = 3.0; // charge
@@ -289,8 +283,31 @@ fn test_coulomb() {
         0.0,
         epsilon = eps
     );
+
+    let field_scalar = pot.ion_field_scalar(z1, r.norm());
+    assert_relative_eq!(field_scalar, field.norm(), epsilon = eps);
+
     let field = pot.dipole_field(&mu1, &r);
     assert_relative_eq!(field[0], 0.002872404612, epsilon = eps);
     assert_relative_eq!(field[1], -0.0004233017324, epsilon = eps);
     assert_relative_eq!(field[2], -0.0006651884364, epsilon = eps);
+}
+
+#[cfg(feature = "uom")]
+#[test]
+#[cfg(feature = "uom")]
+fn test_plain_si() {
+    use crate::{pairwise::MultipoleEnergySI, units::*};
+    use approx::assert_relative_eq;
+    let eps = 1e-9; // Set epsilon for approximate equality
+    let pot = Plain::without_cutoff();
+    let z1 = ElectricCharge::new::<elementary_charge>(2.0);
+    let z2 = ElectricCharge::new::<elementary_charge>(3.0);
+    let r = Length::new::<nanometer>(2.3);
+    let energy = pot.ion_ion_energy(z1, z2, r);
+    assert_relative_eq!(
+        energy.get::<kilojoule_per_mole>(),
+        362.4403242896922,
+        epsilon = eps
+    );
 }

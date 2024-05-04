@@ -16,19 +16,11 @@
 // limitations under the license.
 
 use crate::math::erfc_x;
-use crate::pairwise::{
-    MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential, SelfEnergyPrefactors,
-    ShortRangeFunction,
-};
+use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 #[cfg(test)]
 use approx::assert_relative_eq;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-impl MultipolePotential for RealSpaceEwald {}
-impl MultipoleField for RealSpaceEwald {}
-impl MultipoleForce for RealSpaceEwald {}
-impl MultipoleEnergy for RealSpaceEwald {}
 
 /// Scheme for real-space Ewald interactions
 ///
@@ -182,6 +174,8 @@ impl ShortRangeFunction for RealSpaceEwald {
 
 #[test]
 fn test_ewald() {
+    use crate::pairwise::MultipoleEnergy;
+
     // Test short-ranged function without salt
     let cutoff = 29.0;
     let alpha = 0.1;

@@ -57,11 +57,6 @@ impl Display for ReactionField {
     }
 }
 
-impl MultipolePotential for ReactionField {}
-impl MultipoleField for ReactionField {}
-impl MultipoleForce for ReactionField {}
-impl MultipoleEnergy for ReactionField {}
-
 impl ReactionField {
     /// Create a new reaction-field potential
     ///
