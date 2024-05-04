@@ -43,6 +43,9 @@ dyn_clone::clone_trait_object!(RelativePermittivity);
 ///
 /// let vacuum = ConstantPermittivity::vacuum();
 /// assert_eq!(vacuum.permittivity(298.15).unwrap(), 1.0);
+///
+/// let perfect_conductor = ConstantPermittivity::perfect_conductor();
+/// assert_eq!(perfect_conductor.to_string(), "εᵣ = ∞ for all 𝑇");
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ConstantPermittivity {
@@ -67,6 +70,17 @@ impl ConstantPermittivity {
 impl RelativePermittivity for ConstantPermittivity {
     fn permittivity(&self, _: f64) -> Result<f64> {
         Ok(self.permittivity)
+    }
+}
+
+impl Display for ConstantPermittivity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = if self.permittivity.is_infinite() {
+            "∞".to_string()
+        } else {
+            format!("{:.2}", self.permittivity)
+        };
+        write!(f, "εᵣ = {} for all 𝑇", s)
     }
 }
 
