@@ -168,7 +168,7 @@ pub trait MultipoleFieldSI: MultipoleField {
     ///
     /// The magnitude of the electric field from a point charge is calculated
     /// a `distance` away from the charge.
-    fn ion_field_si(
+    fn ion_field(
         &self,
         charge: crate::units::ElectricCharge,
         distance: crate::units::Length,

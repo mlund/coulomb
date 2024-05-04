@@ -16,10 +16,6 @@
 // limitations under the license.
 
 use crate::pairwise::ShortRangeFunction;
-#[cfg(test)]
-use crate::{Matrix3, Vector3};
-#[cfg(test)]
-use approx::assert_relative_eq;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -109,6 +105,9 @@ impl ShortRangeFunction for Plain {
 
 #[test]
 fn test_coulomb() {
+    use crate::{Matrix3, Vector3};
+    use approx::assert_relative_eq;
+
     use crate::pairwise::{MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential};
     let cutoff: f64 = 29.0; // cutoff distance
     let z1 = 2.0; // charge
@@ -297,7 +296,10 @@ fn test_coulomb() {
 #[test]
 #[cfg(feature = "uom")]
 fn test_plain_si() {
-    use crate::{pairwise::MultipoleEnergySI, units::*};
+    use crate::{
+        pairwise::{MultipoleEnergySI, MultipoleFieldSI, MultipolePotentialSI},
+        units::*,
+    };
     use approx::assert_relative_eq;
     let eps = 1e-9; // Set epsilon for approximate equality
     let pot = Plain::without_cutoff();
@@ -308,6 +310,15 @@ fn test_plain_si() {
     assert_relative_eq!(
         energy.get::<kilojoule_per_mole>(),
         362.4403242896922,
+        epsilon = eps
+    );
+    let potential = pot.ion_potential(z1, r);
+    assert_relative_eq!(potential.get::<volt>(), 1.2521430850804929, epsilon = eps);
+
+    let field = pot.ion_field(z1, r);
+    assert_relative_eq!(
+        field.get::<volt_per_micrometer>(),
+        544.4100369915187,
         epsilon = eps
     );
 }

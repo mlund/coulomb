@@ -106,9 +106,10 @@ pub trait MultipolePotentialSI: MultipolePotential {
         use crate::units::*;
         let z = charge.get::<elementary_charge>();
         let r = distance.get::<angstrom>();
-        ElectricChargeLinearDensity::new::<valence_per_angstrom>(MultipolePotential::ion_potential(self, z, r))
-            / (4.0
-                * std::f64::consts::PI
-                * ElectricPermittivity::new::<farad_per_meter>(crate::VACUUM_ELECTRIC_PERMITTIVITY))
+        ElectricChargeLinearDensity::new::<valence_per_angstrom>(MultipolePotential::ion_potential(
+            self, z, r,
+        )) / (4.0
+            * std::f64::consts::PI
+            * ElectricPermittivity::new::<farad_per_meter>(crate::VACUUM_ELECTRIC_PERMITTIVITY))
     }
 }
