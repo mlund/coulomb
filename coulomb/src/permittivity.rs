@@ -58,6 +58,10 @@ impl ConstantPermittivity {
     pub const fn vacuum() -> Self {
         Self::new(1.0)
     }
+    /// New _perfect conductor_ with infinity permittivity, εᵣ = ∞
+    pub const fn perfect_conductor() -> Self {
+        Self::new(f64::INFINITY)
+    }
 }
 
 impl RelativePermittivity for ConstantPermittivity {
