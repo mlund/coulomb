@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Multipole interaction energies
+//! Multipole interaction energies.
 
 #[cfg(feature = "uom")]
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
 use super::{MultipoleField, MultipolePotential};
 use crate::{Matrix3, Vector3};
 
-/// # Interaction energy between multipoles
+/// Interaction energy between multipoles.
 pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// Self-energy of monopoles and dipoles
     ///
@@ -117,6 +117,7 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     }
 }
 
+/// Interaction energy between multipoles with compile time units.
 #[cfg(feature = "uom")]
 pub trait MultipoleEnergySI: MultipolePotentialSI + MultipoleFieldSI {
     /// Molar interaction energy between two point charges with units

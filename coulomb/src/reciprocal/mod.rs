@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! Support for working with reciprocal space in Ewald summation schemes.
+//! Reciprocal space in Ewald summation schemes.
 
 use crate::Cutoff;
 use core::f64::consts::PI;

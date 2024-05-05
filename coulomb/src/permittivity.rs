@@ -12,6 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+//! Relative permittivity models
+
 use anyhow::Result;
 use core::fmt;
 use core::fmt::{Display, Formatter};
@@ -32,20 +34,39 @@ pub trait RelativePermittivity: DynClone {
 
 dyn_clone::clone_trait_object!(RelativePermittivity);
 
+/// Perfect conductor with infinite permittivity, εᵣ = ∞
+pub const METAL: ConstantPermittivity = ConstantPermittivity::new(f64::INFINITY);
+
+/// Relative permittivity of free space, εᵣ = 1.0
+pub const VACUUM: ConstantPermittivity = ConstantPermittivity::new(1.0);
+
+/// Relative permittivity of water, εᵣ(𝑇)
+pub const WATER: EmpiricalPermittivity = EmpiricalPermittivity::new(
+    &[-1664.4988, -0.884533, 0.0003635, 64839.1736, 308.3394],
+    (273.0, 403.0),
+);
+/// Relative permittivity of methanol, εᵣ(𝑇)
+pub const METHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
+    &[-1750.3069, -0.99026, 0.0004666, 51360.2652, 327.3124],
+    (176.0, 318.0),
+);
+/// Relative permittivity of ethanol, εᵣ(𝑇)
+pub const ETHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
+    &[-1522.2782, -1.00508, 0.0005211, 38733.9481, 293.1133],
+    (288.0, 328.0),
+);
+
 /// Temperature independent relative permittivity, εᵣ = constant
 ///
 /// # Example
 /// ~~~
-/// use coulomb::{ConstantPermittivity, RelativePermittivity};
+/// use coulomb::permittivity::*;
 /// let dielec = ConstantPermittivity::new(2.0);
 /// assert_eq!(dielec.permittivity(298.15).unwrap(), 2.0);
 /// assert!(dielec.temperature_is_ok(f64::INFINITY));
 ///
-/// let vacuum = ConstantPermittivity::vacuum();
-/// assert_eq!(vacuum.permittivity(298.15).unwrap(), 1.0);
-///
-/// let perfect_conductor = ConstantPermittivity::perfect_conductor();
-/// assert_eq!(perfect_conductor.to_string(), "εᵣ = ∞ for all 𝑇");
+/// assert_eq!(VACUUM.permittivity(298.15).unwrap(), 1.0);
+/// assert_eq!(METAL.to_string(), "εᵣ = ∞ for all 𝑇");
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ConstantPermittivity {
@@ -57,14 +78,6 @@ impl ConstantPermittivity {
     pub const fn new(permittivity: f64) -> Self {
         Self { permittivity }
     }
-    /// New constant permittivity for vacuum, εᵣ = 1.0
-    pub const fn vacuum() -> Self {
-        Self::new(1.0)
-    }
-    /// New _perfect conductor_ with infinity permittivity, εᵣ = ∞
-    pub const fn perfect_conductor() -> Self {
-        Self::new(f64::INFINITY)
-    }
 }
 
 impl RelativePermittivity for ConstantPermittivity {
@@ -75,12 +88,14 @@ impl RelativePermittivity for ConstantPermittivity {
 
 impl Display for ConstantPermittivity {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let s = if self.permittivity.is_infinite() {
-            "∞".to_string()
-        } else {
-            format!("{:.2}", self.permittivity)
-        };
-        write!(f, "εᵣ = {} for all 𝑇", s)
+        write!(
+            f,
+            "εᵣ = {} for all 𝑇",
+            match self.permittivity.is_infinite() {
+                true => "∞".to_string(),
+                false => format!("{:.2}", self.permittivity),
+            }
+        )
     }
 }
 
@@ -91,16 +106,16 @@ impl Display for ConstantPermittivity {
 ///
 /// # Example
 /// ~~~
-/// use coulomb::{EmpiricalPermittivity, RelativePermittivity};
-/// assert_eq!(EmpiricalPermittivity::WATER.permittivity(298.15).unwrap(), 78.35565171480539);
-/// assert_eq!(EmpiricalPermittivity::METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
-/// assert_eq!(EmpiricalPermittivity::ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
+/// use coulomb::permittivity::*;
+/// assert_eq!(WATER.permittivity(298.15).unwrap(), 78.35565171480539);
+/// assert_eq!(METHANOL.permittivity(298.15).unwrap(), 33.081980713895064);
+/// assert_eq!(ETHANOL.permittivity(298.15).unwrap(), 24.33523434183735);
 /// ~~~
 ///
 /// We can also pretty print the model:
 /// ~~~
-/// # use coulomb::EmpiricalPermittivity;
-/// assert_eq!(EmpiricalPermittivity::WATER.to_string(),
+/// # use coulomb::permittivity::*;
+/// assert_eq!(WATER.to_string(),
 ///            "εᵣ(𝑇) = -1.66e3 + -8.85e-1𝑇 + 3.63e-4𝑇² + 6.48e4/𝑇 + 3.08e2㏑(𝑇); 𝑇 = [273.0, 403.0]");
 /// ~~~
 #[derive(Debug, PartialEq, Clone)]
@@ -120,21 +135,6 @@ impl EmpiricalPermittivity {
             temperature_interval,
         }
     }
-    /// Relative permittivity of water
-    pub const WATER: EmpiricalPermittivity = EmpiricalPermittivity::new(
-        &[-1664.4988, -0.884533, 0.0003635, 64839.1736, 308.3394],
-        (273.0, 403.0),
-    );
-    /// Relative permittivity of methanol
-    pub const METHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
-        &[-1750.3069, -0.99026, 0.0004666, 51360.2652, 327.3124],
-        (176.0, 318.0),
-    );
-    /// Relative permittivity of ethanol
-    pub const ETHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
-        &[-1522.2782, -1.00508, 0.0005211, 38733.9481, 293.1133],
-        (288.0, 328.0),
-    );
 }
 
 impl RelativePermittivity for EmpiricalPermittivity {

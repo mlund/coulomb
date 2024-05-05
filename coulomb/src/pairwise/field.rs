@@ -25,7 +25,7 @@ unit! {
     @valence_per_angstrom_squared: 16.02176634; "e/Å2", "valence_per_angstrom_squared", "valence_per_angstrom_squared";
 }
 
-/// # Field due to electric multipoles
+/// Field due to electric multipoles.
 pub trait MultipoleField: ShortRangeFunction + Cutoff {
     /// Returns the electrostatic field from a point charge.
     ///
@@ -162,6 +162,7 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
     }
 }
 
+/// Field due to electric multipoles with compile time units.
 #[cfg(feature = "uom")]
 pub trait MultipoleFieldSI: MultipoleField {
     /// Electrostatic field magnitude from point charge with units

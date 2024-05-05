@@ -41,7 +41,7 @@
 //! ### Examples
 //!
 //! The is a [`Medium`] of neat water at 298.15 K where the temperature-dependent
-//! dielectric constant is found by the [`EmpiricalPermittivity::WATER`] model:
+//! dielectric constant is found by the [`permittivity::WATER`] model:
 //! ~~~
 //! # use approx::assert_relative_eq;
 //! use coulomb::*;
@@ -98,12 +98,11 @@ const LITER_PER_ANGSTROM3: f64 = 1e-27;
 mod math;
 mod medium;
 pub mod pairwise;
-mod permittivity;
+pub mod permittivity;
 pub mod reciprocal;
 mod salt;
 mod spline;
 pub use medium::Medium;
-pub use permittivity::{ConstantPermittivity, EmpiricalPermittivity, RelativePermittivity};
 pub use salt::Salt;
 
 use anyhow::Result;
@@ -146,7 +145,7 @@ pub trait IonicStrength {
 }
 
 /// Trait for objects where a Debye length can be calculated
-pub trait DebyeLength: IonicStrength + RelativePermittivity + Temperature {
+pub trait DebyeLength: IonicStrength + permittivity::RelativePermittivity + Temperature {
     /// # Debye length in angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,

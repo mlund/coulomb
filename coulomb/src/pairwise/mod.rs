@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! # Pairwise Electrostatic Interactions
+//! Pairwise Electrostatic Interactions.
 //!
 //! This module contains functions for computing the electrostatic potential;
 //! fields; forces; and energies from and between electric multipoles.
@@ -70,7 +70,7 @@ impl<T: MultipoleField> MultipoleFieldSI for T {}
 #[cfg(feature = "uom")]
 impl<T: MultipolePotential> MultipolePotentialSI for T {}
 
-/// Short-range function for electrostatic interaction schemes
+/// Short-range function for electrostatic interaction schemes.
 ///
 /// The short-range function, $S(q)$, is a function of the reduced distance $q = r/r_c$,
 /// where $r$ is the distance between the interacting particles and $r_c$

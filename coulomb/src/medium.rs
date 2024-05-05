@@ -12,8 +12,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+use crate::permittivity::RelativePermittivity;
 use crate::*;
-
 use anyhow::Result;
 use core::fmt::{Display, Formatter};
 
@@ -31,7 +31,7 @@ use core::fmt::{Display, Formatter};
 ///
 /// ## Pure water
 /// ~~~
-/// use coulomb::{Medium, DebyeLength, IonicStrength};
+/// use coulomb::{Medium, DebyeLength, IonicStrength, Salt};
 /// let medium = Medium::neat_water(298.15);
 /// assert_eq!(medium.permittivity(), 78.35565171480539);
 /// assert!(medium.ionic_strength().is_none());
@@ -39,7 +39,7 @@ use core::fmt::{Display, Formatter};
 /// ~~~
 /// ## Salty water
 /// ~~~
-/// use coulomb::{Medium, Salt, DebyeLength, IonicStrength};
+/// # use coulomb::{Medium, DebyeLength, IonicStrength, Salt};
 /// let medium = Medium::salt_water(298.15, Salt::CalciumChloride, 0.1);
 /// approx::assert_abs_diff_eq!(medium.ionic_strength().unwrap(), 0.3);
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
@@ -72,7 +72,7 @@ impl Medium {
     /// Medium with neat water using the `PermittivityNR::WATER` model
     pub fn neat_water(temperature: f64) -> Self {
         Self {
-            permittivity: Box::new(EmpiricalPermittivity::WATER),
+            permittivity: Box::new(permittivity::WATER),
             salt: None,
             temperature,
         }
@@ -80,7 +80,7 @@ impl Medium {
     /// Medium with salt water using the `PermittivityNR::WATER` model
     pub fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
         Self {
-            permittivity: Box::new(EmpiricalPermittivity::WATER),
+            permittivity: Box::new(permittivity::WATER),
             salt: Some((salt, molarity)),
             temperature,
         }

@@ -17,7 +17,7 @@
 use super::ShortRangeFunction;
 use crate::{Cutoff, Matrix3, Vector3};
 
-/// Electric potential from point multipoles
+/// Electric potential from point multipoles.
 ///
 /// The units of the returned potentials is [ ( input charge ) / ( input length ) ]
 pub trait MultipolePotential: ShortRangeFunction + Cutoff {
@@ -91,6 +91,7 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
     }
 }
 
+/// Electric potential from point multipoles with compile time units.
 #[cfg(feature = "uom")]
 pub trait MultipolePotentialSI: MultipolePotential {
     /// Ion-ion energy with units

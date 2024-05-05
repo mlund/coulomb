@@ -18,7 +18,7 @@
 use super::MultipoleField;
 use crate::{Matrix3, Vector3};
 
-/// # Force between multipoles
+/// Force between multipoles.
 pub trait MultipoleForce: MultipoleField {
     /// Force between two point charges.
     ///
