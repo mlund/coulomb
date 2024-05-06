@@ -147,11 +147,12 @@ impl Temperature for Medium {
     fn set_temperature(&mut self, temperature: f64) -> anyhow::Result<()> {
         if self.permittivity.temperature_is_ok(temperature) {
             self.temperature = temperature;
-            return Ok(());
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "Temperature out of range for permittivity model"
+            ))
         }
-        Err(anyhow::anyhow!(
-            "Temperature out of range for permittivity model"
-        ))
     }
 }
 impl RelativePermittivity for Medium {

@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Trait for objects that has a relative permittivity
 pub trait RelativePermittivity: DynClone {
-    /// Get the relative permittivity. May error if the temperature is out of range.
+    /// Relative permittivity or error if temperature is out of range.
     fn permittivity(&self, temperature: f64) -> Result<f64>;
 
     /// Test is temperature is within range
@@ -41,16 +41,22 @@ pub const METAL: ConstantPermittivity = ConstantPermittivity::new(f64::INFINITY)
 pub const VACUUM: ConstantPermittivity = ConstantPermittivity::new(1.0);
 
 /// Relative permittivity of water, εᵣ(𝑇)
+///
+/// See <https://doi.org/ggddkk>.
 pub const WATER: EmpiricalPermittivity = EmpiricalPermittivity::new(
     &[-1664.4988, -0.884533, 0.0003635, 64839.1736, 308.3394],
     (273.0, 403.0),
 );
 /// Relative permittivity of methanol, εᵣ(𝑇)
+///
+/// See <https://doi.org/ggddkk>.
 pub const METHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
     &[-1750.3069, -0.99026, 0.0004666, 51360.2652, 327.3124],
     (176.0, 318.0),
 );
 /// Relative permittivity of ethanol, εᵣ(𝑇)
+///
+/// See <https://doi.org/ggddkk>.
 pub const ETHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
     &[-1522.2782, -1.00508, 0.0005211, 38733.9481, 293.1133],
     (288.0, 328.0),
