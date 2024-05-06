@@ -18,13 +18,6 @@
 use super::ShortRangeFunction;
 use crate::{Cutoff, Matrix3, Vector3};
 
-#[cfg(feature = "uom")]
-unit! {
-    system: uom::si;
-    quantity: uom::si::electric_charge_areal_density; // charge per length^2
-    @valence_per_angstrom_squared: 16.02176634; "e/Å2", "valence_per_angstrom_squared", "valence_per_angstrom_squared";
-}
-
 /// Field due to electric multipoles.
 pub trait MultipoleField: ShortRangeFunction + Cutoff {
     /// Returns the electrostatic field from a point charge.
@@ -159,33 +152,5 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
             let field_i = f * r_hat / r4 * (s2 * q2 - q2 * q * s3);
             0.5 * (field_d + field_i)
         }
-    }
-}
-
-/// Field due to electric multipoles with compile time units.
-#[cfg(feature = "uom")]
-pub trait MultipoleFieldSI: MultipoleField {
-    /// Electrostatic field magnitude from point charge with units
-    ///
-    /// The magnitude of the electric field from a point charge is calculated
-    /// a `distance` away from the charge.
-    fn ion_field(
-        &self,
-        charge: crate::units::ElectricCharge,
-        distance: crate::units::Length,
-    ) -> crate::units::ElectricField {
-        use crate::units::*;
-        use num::Zero;
-        use uom::si::electric_charge_areal_density::ElectricChargeArealDensity;
-
-        let r = distance.get::<angstrom>();
-        if r >= self.cutoff() {
-            return ElectricField::zero();
-        }
-        let charge_areal_density = self.ion_field_scalar(charge.get::<elementary_charge>(), r);
-        ElectricChargeArealDensity::new::<valence_per_angstrom_squared>(charge_areal_density)
-            / (4.0
-                * std::f64::consts::PI
-                * ElectricPermittivity::new::<farad_per_meter>(crate::VACUUM_ELECTRIC_PERMITTIVITY))
     }
 }

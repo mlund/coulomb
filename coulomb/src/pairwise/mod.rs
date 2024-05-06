@@ -56,19 +56,14 @@ pub use {
     potential::MultipolePotential,
 };
 #[cfg(feature = "uom")]
-pub use {energy::MultipoleEnergySI, field::MultipoleFieldSI, potential::MultipolePotentialSI};
+mod uom;
+#[cfg(feature = "uom")]
+pub use {uom::MultipoleEnergySI, uom::MultipoleFieldSI, uom::MultipolePotentialSI};
 
 impl<T: ShortRangeFunction + crate::Cutoff> MultipolePotential for T {}
 impl<T: ShortRangeFunction + crate::Cutoff> MultipoleField for T {}
 impl<T: MultipoleField> MultipoleForce for T {}
 impl<T: MultipolePotential + MultipoleField> MultipoleEnergy for T {}
-
-#[cfg(feature = "uom")]
-impl<T: MultipoleEnergy> MultipoleEnergySI for T {}
-#[cfg(feature = "uom")]
-impl<T: MultipoleField> MultipoleFieldSI for T {}
-#[cfg(feature = "uom")]
-impl<T: MultipolePotential> MultipolePotentialSI for T {}
 
 /// Short-range function for electrostatic interaction schemes.
 ///

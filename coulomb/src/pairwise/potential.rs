@@ -90,27 +90,3 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
             }
     }
 }
-
-/// Electric potential from point multipoles with compile time units.
-#[cfg(feature = "uom")]
-pub trait MultipolePotentialSI: MultipolePotential {
-    /// Ion-ion energy with units
-    ///
-    /// # Note
-    ///
-    /// Assumes that the cutoff distance is in angstrom!
-    fn ion_potential(
-        &self,
-        charge: crate::units::ElectricCharge,
-        distance: crate::units::Length,
-    ) -> crate::units::ElectricPotential {
-        use crate::units::*;
-        let z = charge.get::<elementary_charge>();
-        let r = distance.get::<angstrom>();
-        ElectricChargeLinearDensity::new::<valence_per_angstrom>(MultipolePotential::ion_potential(
-            self, z, r,
-        )) / (4.0
-            * std::f64::consts::PI
-            * ElectricPermittivity::new::<farad_per_meter>(crate::VACUUM_ELECTRIC_PERMITTIVITY))
-    }
-}

@@ -17,12 +17,6 @@
 
 //! Multipole interaction energies.
 
-#[cfg(feature = "uom")]
-use crate::{
-    pairwise::{MultipoleFieldSI, MultipolePotentialSI},
-    units::*,
-};
-
 use super::{MultipoleField, MultipolePotential};
 use crate::{Matrix3, Vector3};
 
@@ -114,21 +108,5 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// where Phi(Q, -r) is the potential from the quadrupole at the location of the ion.
     fn ion_quadrupole_energy(&self, charge: f64, quad: &Matrix3, r: &Vector3) -> f64 {
         charge * self.quadrupole_potential(quad, &(-r)) // potential of quadrupole interacting with charge
-    }
-}
-
-/// Interaction energy between multipoles with compile time units.
-#[cfg(feature = "uom")]
-pub trait MultipoleEnergySI: MultipolePotentialSI + MultipoleFieldSI {
-    /// Molar interaction energy between two point charges with units
-    fn ion_ion_energy(
-        &self,
-        charge1: crate::units::ElectricCharge,
-        charge2: crate::units::ElectricCharge,
-        distance: crate::units::Length,
-    ) -> MolarEnergy {
-        use crate::units::*;
-        charge1 * MultipolePotentialSI::ion_potential(self, charge2, distance)
-            / AmountOfSubstance::new::<mole>(1.0 / crate::AVOGADRO_CONSTANT)
     }
 }
