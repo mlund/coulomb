@@ -81,7 +81,9 @@ impl<T: MultipolePotential + MultipoleField> MultipoleEnergy for T {}
 /// a long-range part.
 pub trait ShortRangeFunction {
     /// URL to the original article describing the short-range function.
-    fn url() -> &'static str;
+    fn url() -> &'static str
+    where
+        Self: Sized;
 
     /// Inverse Debye screening length.
     ///
@@ -166,6 +168,10 @@ mod tests {
 
     #[test]
     fn test_electric_constant() {
+        // check that we can create a trait object
+        let _trait_object =
+            &crate::pairwise::Plain::default() as &dyn crate::pairwise::ShortRangeFunction;
+
         let bjerrum_length = 7.1; // angstrom
         let rel_dielectric_const = 80.0;
         assert_relative_eq!(
