@@ -12,10 +12,11 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-//! In this example we calculate the electric potential at grid points in the XY-plane due to two particles
-//! with charge, dipole moment, and radius.
-//! The potential is calculated using the plain Coulomb scheme and saved as an image where negative to positive
-//! potential is mapped to a color gradient from red to blue.
+//! Visualizes the electric potential at grid points in the XY-plane due to
+//! two particles with charge, dipole moment, and radius.
+//! The potential is calculated using the plain Coulomb scheme and saved as
+//! a bitmap image where negative to positive potential is mapped to a color
+//! gradient from red to blue.
 
 extern crate image;
 
@@ -38,13 +39,12 @@ struct Particle {
 }
 
 impl Particle {
-    /// Potential at a given position due to the particle (ion and dipole contributions)
-    ///
-    /// Returns `None` if the position is inside the particle.
+    /// Sum of ion and dipole potential at `pos` or `None` if inside particle
     pub fn potential<T: MultipolePotential>(&self, pos: &Vector3, scheme: &T) -> Option<f64> {
         let r = pos - self.pos;
-        (r.norm() > self.radius).then(|| {
-            scheme.ion_potential(self.charge, r.norm()) + scheme.dipole_potential(&self.dipole, &r)
+        let norm = r.norm();
+        (norm > self.radius).then(|| {
+            scheme.ion_potential(self.charge, norm) + scheme.dipole_potential(&self.dipole, &r)
         })
     }
 }
