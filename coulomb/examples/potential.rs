@@ -91,7 +91,8 @@ fn main() {
     let max = data
         .iter()
         .map(|(_, _, p)| p.abs())
-        .fold(f64::NEG_INFINITY, f64::max);
+        .max_by(f64::total_cmp)
+        .unwrap();
 
     // New image and color gradient
     let mut img = RgbaImage::new(WIDTH, HEIGHT);
