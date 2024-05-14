@@ -20,21 +20,51 @@ use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 #[cfg(test)]
 use approx::assert_relative_eq;
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Scheme for real-space Ewald interactions
 ///
 /// Further information, see original article by _P.P. Ewald_, <https://doi.org/fcjts8>.
 ///
-#[derive(Clone, Copy, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct RealSpaceEwald {
     /// Real space cutoff distance, 𝑟✂︎
     cutoff: f64,
+    /// Alpha
+    alpha: f64,
+    /// Debye length
+    #[cfg_attr(feature = "serde", serde(alias = "debyelength"))]
+    debye_length: Option<f64>,
     /// Reduced alpha, 𝜂 = 𝛼 × 𝑟✂︎ (dimensionless)
+    #[cfg_attr(feature = "serde", serde(skip))]
     eta: f64,
     /// Reduced inverse screening length, 𝜻 = 𝜿 × 𝑟✂︎ (dimensionless)
+    #[cfg_attr(feature = "serde", serde(skip))]
     zeta: Option<f64>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for RealSpaceEwald {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct RealSpaceEwaldData {
+            cutoff: f64,
+            alpha: f64,
+            debye_length: Option<f64>,
+        }
+
+        let RealSpaceEwaldData {
+            cutoff,
+            alpha,
+            debye_length,
+        } = RealSpaceEwaldData::deserialize(deserializer)?;
+        Ok(RealSpaceEwald::new(cutoff, alpha, debye_length))
+    }
 }
 
 impl core::fmt::Display for RealSpaceEwald {
@@ -61,6 +91,8 @@ impl RealSpaceEwald {
     pub fn new(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
+            alpha,
+            debye_length,
             eta: alpha * cutoff,
             zeta: debye_length.map(|d| cutoff / d),
         }

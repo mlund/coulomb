@@ -18,6 +18,8 @@
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 use crate::{math::erf_x, math::erfc_x, Cutoff};
 use core::f64::consts::FRAC_2_SQRT_PI;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Truncated Gaussian Ewald scheme (real-space part).
 ///
@@ -33,18 +35,43 @@ use core::f64::consts::FRAC_2_SQRT_PI;
 /// computational optimization while maintaining accuracy, which is in contrast to when a
 /// Gaussian is used._
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EwaldTruncated {
     /// Cutoff radius
     cutoff: f64,
+    /// Alpha
+    alpha: f64,
     /// Reduced alpha = alpha * cutoff
+    #[cfg_attr(feature = "serde", serde(skip))]
     eta: f64,
     /// erfc(eta)
+    #[cfg_attr(feature = "serde", serde(skip))]
     erfc_eta: f64,
     /// exp(-eta^2)
+    #[cfg_attr(feature = "serde", serde(skip))]
     exp_minus_eta2: f64,
     /// f0 = 1 / (1 - erfc(eta) - 2 * eta / sqrt(pi) * exp(-eta^2))
+    #[cfg_attr(feature = "serde", serde(skip))]
     f0: f64,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for EwaldTruncated {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct EwaldTruncatedData {
+            cutoff: f64,
+            alpha: f64,
+        }
+
+        let EwaldTruncatedData { cutoff, alpha } = EwaldTruncatedData::deserialize(deserializer)?;
+        Ok(EwaldTruncated::new(cutoff, alpha))
+    }
 }
 
 impl EwaldTruncated {
@@ -56,6 +83,7 @@ impl EwaldTruncated {
         let f0 = (1.0 - erfc_x(eta) - eta * FRAC_2_SQRT_PI * (-eta * eta).exp()).recip();
         Self {
             cutoff,
+            alpha,
             eta,
             erfc_eta: erfc_x(eta),
             exp_minus_eta2: (-eta * eta).exp(),
