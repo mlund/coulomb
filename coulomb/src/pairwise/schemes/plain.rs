@@ -18,7 +18,7 @@
 use crate::pairwise::ShortRangeFunction;
 
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Scheme for vanilla Coulomb interactions, $S(q)=1$.
 ///
@@ -30,7 +30,36 @@ pub struct Plain {
     /// Cut-off distance
     cutoff: f64,
     /// Optional inverse Debye length
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "debye",
+            serialize_with = "serialize_reciprocal",
+            deserialize_with = "deserialize_reciprocal"
+        )
+    )]
     kappa: Option<f64>,
+}
+
+/// Convert from kappa to debye when serializing.
+#[cfg(feature = "serde")]
+fn serialize_reciprocal<S>(x: &Option<f64>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match x.as_ref() {
+        Some(&value) => s.serialize_some(&f64::recip(value)),
+        None => s.serialize_none(),
+    }
+}
+
+/// Convert from debye to kappa when serializing.
+#[cfg(feature = "serde")]
+fn deserialize_reciprocal<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::deserialize(deserializer)?.map(f64::recip))
 }
 
 impl Default for Plain {
