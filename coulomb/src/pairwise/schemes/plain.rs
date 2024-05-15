@@ -24,7 +24,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 ///
 /// See _Premier mémoire sur l’électricité et le magnétisme_ by Charles-Augustin de Coulomb,
 /// <https://doi.org/msxd>.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Plain {
     /// Cut-off distance
