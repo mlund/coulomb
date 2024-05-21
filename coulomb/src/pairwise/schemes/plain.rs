@@ -35,7 +35,8 @@ pub struct Plain {
         serde(
             rename = "debye",
             serialize_with = "serialize_reciprocal",
-            deserialize_with = "deserialize_reciprocal"
+            deserialize_with = "deserialize_reciprocal",
+            default
         )
     )]
     kappa: Option<f64>,
