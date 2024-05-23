@@ -39,6 +39,7 @@ pub struct Plain {
             default
         )
     )]
+    #[serde(alias = "κ")]
     kappa: Option<f64>,
 }
 

@@ -41,6 +41,7 @@ pub struct EwaldTruncated {
     /// Cutoff radius
     cutoff: f64,
     /// Alpha
+    #[cfg_attr(feature = "serde", serde(alias = "α"))]
     alpha: f64,
     /// Reduced alpha = alpha * cutoff
     #[cfg_attr(feature = "serde", serde(skip))]

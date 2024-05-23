@@ -32,6 +32,7 @@ pub struct RealSpaceEwald {
     /// Real space cutoff distance, 𝑟✂︎
     cutoff: f64,
     /// Alpha
+    #[cfg_attr(feature = "serde", serde(alias = "α"))]
     alpha: f64,
     /// Debye length
     #[cfg_attr(feature = "serde", serde(alias = "debyelength"))]

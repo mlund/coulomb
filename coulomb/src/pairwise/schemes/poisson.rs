@@ -69,6 +69,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct Screening {
     /// Inverse Debye screening length
+    #[cfg_attr(feature = "serde", serde(alias = "κ"))]
     pub kappa: f64,
     /// Reduced kappa = cutoff * kappa
     pub reduced_kappa: f64,
