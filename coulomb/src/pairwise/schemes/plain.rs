@@ -34,12 +34,13 @@ pub struct Plain {
         feature = "serde",
         serde(
             rename = "debye",
+            alias = "debye_length",
+            alias = "debyelength",
             serialize_with = "serialize_reciprocal",
             deserialize_with = "deserialize_reciprocal",
             default
         )
     )]
-    #[serde(alias = "κ")]
     kappa: Option<f64>,
 }
 
