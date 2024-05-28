@@ -18,6 +18,8 @@
 use crate::pairwise::*;
 use crate::Cutoff;
 use core::fmt::Display;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// Reaction-field potential
 ///
@@ -31,11 +33,19 @@ use core::fmt::Display;
 /// The optional last term shifts the potential to zero at the cut-off radius.
 /// See <https://doi.org/dscmwg> for more information.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ReactionField {
-    dielec_out: f64, // Relative permittivity outside the cut-off i.e. the surroundings
-    dielec_in: f64,  // Relative permittivity inside the cut-off i.e. the dispersing medium
-    shift_to_zero: bool, // Shift to zero potential at the cut-off
-    cutoff: f64,     // Cut-off radius
+    /// Relative permittivity outside the cut-off i.e. the surroundings.
+    #[cfg_attr(feature = "serde", serde(alias = "epsrf"))]
+    dielec_out: f64,
+    /// Relative permittivity inside the cut-off i.e. the dispersing medium.
+    #[cfg_attr(feature = "serde", serde(alias = "epsr"))]
+    dielec_in: f64,
+    /// Shift to zero potential at the cut-off.
+    #[cfg_attr(feature = "serde", serde(alias = "shift"))]
+    shift_to_zero: bool,
+    /// Cut-off radius.
+    cutoff: f64,
 }
 
 impl Display for ReactionField {

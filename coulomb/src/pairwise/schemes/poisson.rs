@@ -18,7 +18,7 @@
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 use num::integer::binomial;
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// # Scheme for the Poisson short-range function
 ///
@@ -65,10 +65,11 @@ use serde::{Deserialize, Serialize};
 ///
 
 /// Helper struct to store salt screening parameters
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct Screening {
     /// Inverse Debye screening length
+    #[cfg_attr(feature = "serde", serde(alias = "κ"))]
     pub kappa: f64,
     /// Reduced kappa = cutoff * kappa
     pub reduced_kappa: f64,
@@ -76,17 +77,42 @@ struct Screening {
     pub yukawa_denom: f64,
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Poisson<const C: i32, const D: i32> {
     /// Cutoff radius
     cutoff: f64,
+    /// Debye length
+    #[cfg_attr(feature = "serde", serde(alias = "debyelength"))]
+    debye_length: Option<f64>,
     /// Currently not in use
     #[cfg_attr(feature = "serde", serde(skip))]
     _has_dipolar_selfenergy: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     binom_cdc: f64,
+    #[cfg_attr(feature = "serde", serde(skip))]
     screening: Option<Screening>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de, const C: i32, const D: i32> Deserialize<'de> for Poisson<C, D> {
+    fn deserialize<DES>(deserializer: DES) -> Result<Self, DES::Error>
+    where
+        DES: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct PoissonData {
+            cutoff: f64,
+            debye_length: Option<f64>,
+        }
+
+        let PoissonData {
+            cutoff,
+            debye_length,
+        } = PoissonData::deserialize(deserializer)?;
+        Ok(Poisson::new(cutoff, debye_length))
+    }
 }
 
 /// Scheme for a vanilla coulomb interaction using the Poisson framework. Same as `Coulomb`.
@@ -150,6 +176,7 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         Self {
             cutoff,
+            debye_length,
             _has_dipolar_selfenergy,
             binom_cdc,
             screening,
