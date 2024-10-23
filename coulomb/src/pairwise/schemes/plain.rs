@@ -326,7 +326,6 @@ fn test_coulomb() {
 
 #[cfg(feature = "uom")]
 #[test]
-#[cfg(feature = "uom")]
 fn test_plain_si() {
     use crate::{
         pairwise::{MultipoleEnergySI, MultipoleFieldSI, MultipolePotentialSI},

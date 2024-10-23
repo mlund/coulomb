@@ -82,7 +82,6 @@ extern crate approx;
 
 #[cfg(feature = "uom")]
 #[macro_use]
-#[cfg(feature = "uom")]
 extern crate uom;
 #[cfg(feature = "uom")]
 mod units;

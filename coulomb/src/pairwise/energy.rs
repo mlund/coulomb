@@ -84,7 +84,7 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     ///
     /// - `dipole1`: Dipole moment of particle 1, UNIT: [(input length) x (input charge)]
     /// - `dipole2`: Dipole moment of particle 2, UNIT: [(input length) x (input charge)]
-    /// r: Distance-vector between dipoles, r = r_mu_2 - r_mu_1, UNIT: [input length]
+    /// - `r``: Distance-vector between dipoles, r = r_mu_2 - r_mu_1, UNIT: [input length]
     ///
     /// Returns the interaction energy, UNIT: [(input charge)^2 / (input length)]
     ///
