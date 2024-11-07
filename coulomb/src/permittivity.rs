@@ -37,6 +37,9 @@ dyn_clone::clone_trait_object!(RelativePermittivity);
 /// Perfect conductor with infinite permittivity, εᵣ = ∞
 pub const METAL: ConstantPermittivity = ConstantPermittivity::new(f64::INFINITY);
 
+/// Relative permittivity of water at 25 degree Celcius, εᵣ = 78.4
+pub const WATER_25C: ConstantPermittivity = ConstantPermittivity::new(78.4);
+
 /// Relative permittivity of free space, εᵣ = 1.0
 pub const VACUUM: ConstantPermittivity = ConstantPermittivity::new(1.0);
 
