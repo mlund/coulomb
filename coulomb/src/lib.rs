@@ -94,6 +94,8 @@ pub type Matrix3 = nalgebra::Matrix3<f64>;
 const ANGSTROM_PER_METER: f64 = 1e10;
 const LITER_PER_ANGSTROM3: f64 = 1e-27;
 
+mod cutoff;
+pub use cutoff::Cutoff;
 mod math;
 mod medium;
 pub mod pairwise;
@@ -239,14 +241,3 @@ pub const TO_CHEMISTRY_UNIT: f64 =
 /// assert_eq!(BJERRUM_LEN_VACUUM_298K / relative_permittivity, 7.0057415269733);
 /// ```
 pub const BJERRUM_LEN_VACUUM_298K: f64 = TO_CHEMISTRY_UNIT / (MOLAR_GAS_CONSTANT * 1e-3 * 298.15);
-
-/// Defines a cutoff distance
-pub trait Cutoff {
-    /// Squared cutoff distance
-    fn cutoff_squared(&self) -> f64 {
-        self.cutoff().powi(2)
-    }
-
-    /// Cutoff distance
-    fn cutoff(&self) -> f64;
-}
