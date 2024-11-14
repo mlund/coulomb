@@ -105,6 +105,8 @@ mod salt;
 mod spline;
 pub use medium::Medium;
 pub use salt::Salt;
+mod temperature;
+pub use temperature::Temperature;
 
 use anyhow::Result;
 use physical_constants::{
@@ -112,20 +114,6 @@ use physical_constants::{
     VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use std::f64::consts::PI;
-
-/// Trait for objects with a temperature
-pub trait Temperature {
-    /// Get the temperature in Kelvin
-    fn temperature(&self) -> f64;
-    /// Set the temperature in Kelvin.
-    ///
-    /// The default implementation returns an error.
-    fn set_temperature(&mut self, _temperature: f64) -> Result<()> {
-        Err(anyhow::anyhow!(
-            "Setting the temperature is not implemented"
-        ))
-    }
-}
 
 /// Trait for objects that has an ionic strength
 pub trait IonicStrength {
