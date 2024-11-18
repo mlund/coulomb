@@ -36,8 +36,8 @@ pub trait DebyeLength: IonicStrength + permittivity::RelativePermittivity + Temp
 /// let lB = bjerrum_length(293.0, 80.0); // angstroms
 /// assert_eq!(lB, 7.1288799871283);
 /// ~~~
-pub fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
-    ELEMENTARY_CHARGE.powi(2) * ANGSTROM_PER_METER
+pub const fn bjerrum_length(kelvin: f64, relative_permittivity: f64) -> f64 {
+    ELEMENTARY_CHARGE * ELEMENTARY_CHARGE * ANGSTROM_PER_METER
         / (4.0
             * PI
             * relative_permittivity

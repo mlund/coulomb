@@ -76,7 +76,7 @@ impl ReactionField {
     /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
     /// - `shifted` - Shift to zero potential at the cut-off
     ///
-    pub fn new(cutoff: f64, dielec_out: f64, dielec_in: f64, shift_to_zero: bool) -> Self {
+    pub const fn new(cutoff: f64, dielec_out: f64, dielec_in: f64, shift_to_zero: bool) -> Self {
         Self {
             dielec_out,
             dielec_in,
@@ -92,7 +92,7 @@ impl ReactionField {
     /// - `dielec_out` - Relative permittivity outside the cut-off i.e. the surroundings
     /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
     ///
-    pub fn new_unshifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
+    pub const fn new_unshifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, false)
     }
 
@@ -103,7 +103,7 @@ impl ReactionField {
     /// - `dielec_out` - Relative permittivity outside the cut-off i.e. the surroundings
     /// - `dielec_in` - Relative permittivity inside the cut-off i.e. the dispersing medium
     ///
-    pub fn new_shifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
+    pub const fn new_shifted(cutoff: f64, dielec_out: f64, dielec_in: f64) -> Self {
         Self::new(cutoff, dielec_out, dielec_in, true)
     }
 }
