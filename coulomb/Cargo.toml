@@ -1,11 +1,12 @@
 [package]
 name = "coulomb"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.77"
 description = "Library for electrolytes and electrostatic interactions"
 license = "Apache-2.0"
 #repository = "https://github.com/mlund/faunus-rs/coulomb"
+documentation = "https://docs.rs/coulomb"
 authors = ["Mikael Lund"]
 readme = "README.md"
 categories = ["science"]
@@ -37,5 +38,5 @@ colorgrad = "0.6"
 # for including math in the documentation:
 # export RUSTDOCFLAGS="--html-in-header coulomb/src/docs-header.html"
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "coulomb/src/docs-header.html"]
+rustdoc-args = ["--html-in-header", "./src/docs-header.html"]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
