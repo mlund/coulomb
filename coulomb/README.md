@@ -10,7 +10,7 @@
 -----
 
 <p align = "center">
-<b>CoulombGalore</b></br>
+<b>Coulomb</b></br>
 <i>A Library for Electrolyte Solutions and Electrostatic Interactions</i>
 </p>
 
@@ -18,7 +18,7 @@
 
 # Features
 
-**CoulombGalore** is a library for working with electrolyte solutions and calculating electrostatic interactions
+**Coulomb** is a library for working with electrolyte solutions and calculating electrostatic interactions
 in and between molecules and particles.
 The main purpose is to offer support for molecular simulation software.
 
@@ -65,7 +65,7 @@ let scheme = Plain::default();                     // Vanilla Coulomb scheme, �
 let z = 1.0;                                       // point charge, 𝑧 
 let r = Vector3::new(3.0, 5.0, 0.0);               // distance vector, 𝒓
 let ion_pot = scheme.ion_potential(z, r.norm());   // potential |𝒓| away from charge 
-assert_eq!(ion_pot, charge / r.norm());
+assert_eq!(ion_pot, z / r.norm());
 
 let mu = Vector3::new(0.2, 3.0, -1.0);             // point dipole, 𝝁
 let dipole_pot = scheme.dipole_potential(&mu, &r); // potential 𝒓 away from dipole
