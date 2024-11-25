@@ -129,7 +129,7 @@ impl Display for Medium {
             write!(
                 f,
                 ", 𝐼 = {:.1} mM, λᴰ = {:.1} Å, {:.1} M {}",
-                self.ionic_strength().unwrap(),
+                self.ionic_strength().unwrap() * 1e3,
                 self.debye_length().unwrap(),
                 molarity,
                 salt
