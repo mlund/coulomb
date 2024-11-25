@@ -9,7 +9,7 @@ license = "Apache-2.0"
 authors = ["Mikael Lund"]
 readme = "README.md"
 categories = ["science"]
-keywords = ["electrolytes", "electrostatics", "molecular simulation", "multipoles", "chemistry"]
+keywords = ["electrolytes", "electrostatics", "simulation", "multipoles", "chemistry"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
