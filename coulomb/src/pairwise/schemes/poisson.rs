@@ -63,7 +63,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// | `stenqvist`   | 3   | 3   | Scheme for [Stenqvist](https://doi.org/10/c5fr)
 /// | `fanourgakis` | 4   | 3   | Scheme for [Fanourgakis](https://doi.org/10.1063/1.3216520),
 ///
-
 /// Helper struct to store salt screening parameters
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
