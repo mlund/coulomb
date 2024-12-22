@@ -30,6 +30,10 @@ pub trait RelativePermittivity: DynClone {
     fn temperature_is_ok(&self, temperature: f64) -> bool {
         self.permittivity(temperature).is_ok()
     }
+    /// Convert to constant permittivity for a given temperature
+    fn to_const_permittivity(&self, temperature: f64) -> Result<ConstantPermittivity> {
+        Ok(ConstantPermittivity::new(self.permittivity(temperature)?))
+    }
 }
 
 dyn_clone::clone_trait_object!(RelativePermittivity);
@@ -86,6 +90,18 @@ impl ConstantPermittivity {
     /// New constant permittivity
     pub const fn new(permittivity: f64) -> Self {
         Self { permittivity }
+    }
+}
+
+impl From<ConstantPermittivity> for f64 {
+    fn from(d: ConstantPermittivity) -> f64 {
+        d.permittivity
+    }
+}
+
+impl From<f64> for ConstantPermittivity {
+    fn from(d: f64) -> ConstantPermittivity {
+        ConstantPermittivity::new(d)
     }
 }
 
