@@ -15,6 +15,7 @@
 use crate::permittivity::RelativePermittivity;
 use crate::*;
 use anyhow::Result;
+use permittivity::ConstantPermittivity;
 use core::fmt::{Display, Formatter};
 
 /// # Implicit solvent medium such as water or a salt solution
@@ -164,5 +165,11 @@ impl RelativePermittivity for Medium {
 impl IonicStrength for Medium {
     fn ionic_strength(&self) -> Option<f64> {
         self.salt.as_ref().map(|salt| salt.0.ionic_strength(salt.1))
+    }
+}
+
+impl From<Medium> for ConstantPermittivity {
+    fn from(medium: Medium) -> Self {
+        ConstantPermittivity::new(medium.permittivity())
     }
 }
