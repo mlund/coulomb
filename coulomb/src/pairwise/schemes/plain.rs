@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
-use crate::pairwise::ShortRangeFunction;
+use crate::{pairwise::ShortRangeFunction, DebyeLength};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -99,6 +99,12 @@ impl Plain {
     }
     pub fn new_without_salt(cutoff: f64) -> Self {
         Self::new(cutoff, None)
+    }
+
+    /// Create from medium. The Debye length is calculated from the medium's properties in units
+    /// of angstrom. `cutoff` should be provided in angstrom.
+    pub fn from_medium(cutoff: f64, medium: &crate::Medium) -> Self {
+        Self::new(cutoff, medium.debye_length())
     }
 }
 
