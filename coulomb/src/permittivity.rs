@@ -82,7 +82,9 @@ pub const ETHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
 /// assert_eq!(METAL.to_string(), "εᵣ = ∞ for all 𝑇");
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ConstantPermittivity {
+    #[cfg_attr(feature = "serde", serde(rename = "epsr", alias = "εᵣ"))]
     permittivity: f64,
 }
 

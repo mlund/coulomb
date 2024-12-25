@@ -26,6 +26,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// <https://doi.org/msxd>.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Plain {
     /// Cut-off distance
     cutoff: f64,

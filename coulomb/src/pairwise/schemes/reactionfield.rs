@@ -36,10 +36,10 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ReactionField {
     /// Relative permittivity outside the cut-off i.e. the surroundings.
-    #[cfg_attr(feature = "serde", serde(alias = "epsrf"))]
+    #[cfg_attr(feature = "serde", serde(alias = "epsr_out"))]
     dielec_out: f64,
     /// Relative permittivity inside the cut-off i.e. the dispersing medium.
-    #[cfg_attr(feature = "serde", serde(alias = "epsr"))]
+    #[cfg_attr(feature = "serde", serde(alias = "epsr_in"))]
     dielec_in: f64,
     /// Shift to zero potential at the cut-off.
     #[cfg_attr(feature = "serde", serde(alias = "shift"))]
@@ -83,6 +83,14 @@ impl ReactionField {
             shift_to_zero,
             cutoff,
         }
+    }
+    /// Get outside relative dielectric constant
+    pub const fn permittivity_out(&self) -> f64 {
+        self.dielec_out
+    }
+    /// Get inside relative dielectric constant
+    pub const fn permittivity_in(&self) -> f64 {
+        self.dielec_in
     }
 
     /// Create unshifted reaction-field potential
