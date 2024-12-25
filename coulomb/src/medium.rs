@@ -15,8 +15,8 @@
 use crate::permittivity::RelativePermittivity;
 use crate::*;
 use anyhow::Result;
-use permittivity::ConstantPermittivity;
 use core::fmt::{Display, Formatter};
+use permittivity::{ConstantPermittivity, Permittivity};
 
 /// # Implicit solvent medium such as water or a salt solution
 ///
@@ -48,7 +48,7 @@ use core::fmt::{Display, Formatter};
 #[derive(Clone)]
 pub struct Medium {
     /// Relative permittivity of the medium
-    permittivity: Box<dyn RelativePermittivity>,
+    permittivity: Permittivity,
     /// Salt type and molarity (mol/l)
     salt: Option<(Salt, f64)>,
     /// Temperature in Kelvin
@@ -59,11 +59,7 @@ impl DebyeLength for Medium {}
 
 impl Medium {
     /// Creates a new medium
-    pub fn new(
-        temperature: f64,
-        permittivity: Box<dyn RelativePermittivity>,
-        salt: Option<(Salt, f64)>,
-    ) -> Self {
+    pub fn new(temperature: f64, permittivity: Permittivity, salt: Option<(Salt, f64)>) -> Self {
         Self {
             permittivity,
             salt,
@@ -73,7 +69,7 @@ impl Medium {
     /// Medium with neat water using the `PermittivityNR::WATER` model
     pub fn neat_water(temperature: f64) -> Self {
         Self {
-            permittivity: Box::new(permittivity::WATER),
+            permittivity: Permittivity::Water,
             salt: None,
             temperature,
         }
@@ -81,7 +77,7 @@ impl Medium {
     /// Medium with salt water using the `PermittivityNR::WATER` model
     pub fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
         Self {
-            permittivity: Box::new(permittivity::WATER),
+            permittivity: Permittivity::Water,
             salt: Some((salt, molarity)),
             temperature,
         }

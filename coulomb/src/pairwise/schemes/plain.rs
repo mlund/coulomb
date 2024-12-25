@@ -25,7 +25,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// See _Premier mémoire sur l’électricité et le magnétisme_ by Charles-Augustin de Coulomb,
 /// <https://doi.org/msxd>.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(deny_unknown_fields)
+)]
 pub struct Plain {
     /// Cut-off distance
     cutoff: f64,
@@ -79,7 +83,12 @@ impl core::fmt::Display for Plain {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Plain Coulomb: 𝑟✂ = {:.1}", self.cutoff)?;
         if let Some(debye_length) = self.kappa.map(f64::recip) {
-            write!(f, ", λᴰ = {:.1}, λᴰ/𝑟✂ = {:.1}", debye_length, debye_length / self.cutoff)?;
+            write!(
+                f,
+                ", λᴰ = {:.1}, λᴰ/𝑟✂ = {:.1}",
+                debye_length,
+                debye_length / self.cutoff
+            )?;
         }
         write!(f, " <{}>", Self::url())?;
         Ok(())

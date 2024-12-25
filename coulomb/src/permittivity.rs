@@ -38,19 +38,19 @@ pub trait RelativePermittivity: DynClone {
 
 dyn_clone::clone_trait_object!(RelativePermittivity);
 
-/// Enum for selecting all available permittivity models
+/// Enum for all available permittivity models
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Permittivity {
-    /// Custom constant permittivity
+    /// Custom constant permittivity, independent of temperature
     Constant(ConstantPermittivity),
-    /// Custom empirical permittivity model
+    /// Custom empirical permittivity model with temperature dependence
     Empirical(EmpiricalPermittivity),
-    /// Relative permittivity of water using the NR model
+    /// Relative permittivity of water using the NR model for temperature dependence
     Water,
-    /// Relative permittivity of ethanol using the NR model
+    /// Relative permittivity of ethanol using the NR model for temperature dependence
     Ethanol,
-    /// Relative permittivity of methanol using the NR model
+    /// Relative permittivity of methanol using the NR model for temperature dependence
     Methanol,
     /// Relative permittivity of metal, εᵣ = ∞
     Metal,
@@ -62,8 +62,7 @@ pub enum Permittivity {
 
 impl RelativePermittivity for Permittivity {
     fn permittivity(&self, temperature: f64) -> Result<f64> {
-        let permittivity: Box<dyn RelativePermittivity> = self.clone().into();
-        permittivity.permittivity(temperature)
+        Box::<dyn RelativePermittivity>::from(self.clone()).permittivity(temperature)
     }
 }
 
@@ -78,6 +77,21 @@ impl From<Permittivity> for Box<dyn RelativePermittivity> {
             Permittivity::Metal => Box::new(METAL),
             Permittivity::Vacuum => Box::new(VACUUM),
             Permittivity::Water25 => Box::new(WATER_25C),
+        }
+    }
+}
+
+impl Display for Permittivity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Permittivity::Constant(d) => write!(f, "{}", d),
+            Permittivity::Empirical(d) => write!(f, "{}", d),
+            Permittivity::Water => write!(f, "{}", WATER),
+            Permittivity::Ethanol => write!(f, "{}", ETHANOL),
+            Permittivity::Methanol => write!(f, "{}", METHANOL),
+            Permittivity::Metal => write!(f, "{}", METAL),
+            Permittivity::Vacuum => write!(f, "{}", VACUUM),
+            Permittivity::Water25 => write!(f, "{}", WATER_25C),
         }
     }
 }
