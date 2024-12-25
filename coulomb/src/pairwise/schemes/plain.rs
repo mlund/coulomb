@@ -77,9 +77,9 @@ impl Default for Plain {
 
 impl core::fmt::Display for Plain {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Plain Coulomb: 𝑟✂ = {:.1} Å", self.cutoff)?;
+        write!(f, "Plain Coulomb: 𝑟✂ = {:.1}", self.cutoff)?;
         if let Some(debye_length) = self.kappa.map(f64::recip) {
-            write!(f, ", λᴰ = {:.1} Å", debye_length)?;
+            write!(f, ", λᴰ = {:.1}, λᴰ/𝑟✂ = {:.1}", debye_length, debye_length / self.cutoff)?;
         }
         write!(f, " <{}>", Self::url())?;
         Ok(())
@@ -167,7 +167,7 @@ fn test_coulomb() {
 
     assert_eq!(
         pot.to_string(),
-        "Plain Coulomb: 𝑟✂ = 29.0 Å <https://doi.org/msxd>"
+        "Plain Coulomb: 𝑟✂ = 29.0 <https://doi.org/msxd>"
     );
 
     // Test short-ranged function
@@ -290,7 +290,7 @@ fn test_coulomb() {
 
     assert_eq!(
         pot.to_string(),
-        "Plain Coulomb: 𝑟✂ = 29.0 Å, λᴰ = 23.0 Å <https://doi.org/msxd>"
+        "Plain Coulomb: 𝑟✂ = 29.0, λᴰ = 23.0, λᴰ/𝑟✂ = 0.8 <https://doi.org/msxd>"
     );
 
     assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);
