@@ -52,9 +52,9 @@ pub enum Permittivity {
     Ethanol,
     /// Relative permittivity of methanol using the NR model for temperature dependence
     Methanol,
-    /// Relative permittivity of metal, εᵣ = ∞
+    /// Perfect conductor with infinite permittivity, εᵣ = ∞
     Metal,
-    /// Relative permittivity of vacuum, εᵣ = 1.0
+    /// Relative permittivity of free space, εᵣ = 1.0
     Vacuum,
     /// Relative permittivity of water at 25 degree Celcius, εᵣ = 78.4
     Water25,
