@@ -38,6 +38,50 @@ pub trait RelativePermittivity: DynClone {
 
 dyn_clone::clone_trait_object!(RelativePermittivity);
 
+/// Enum for selecting all available permittivity models
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Permittivity {
+    /// Custom constant permittivity
+    Constant(ConstantPermittivity),
+    /// Custom empirical permittivity model
+    Empirical(EmpiricalPermittivity),
+    /// Relative permittivity of water using the NR model
+    Water,
+    /// Relative permittivity of ethanol using the NR model
+    Ethanol,
+    /// Relative permittivity of methanol using the NR model
+    Methanol,
+    /// Relative permittivity of metal, εᵣ = ∞
+    Metal,
+    /// Relative permittivity of vacuum, εᵣ = 1.0
+    Vacuum,
+    /// Relative permittivity of water at 25 degree Celcius, εᵣ = 78.4
+    Water25,
+}
+
+impl RelativePermittivity for Permittivity {
+    fn permittivity(&self, temperature: f64) -> Result<f64> {
+        let permittivity: Box<dyn RelativePermittivity> = self.clone().into();
+        permittivity.permittivity(temperature)
+    }
+}
+
+impl From<Permittivity> for Box<dyn RelativePermittivity> {
+    fn from(model: Permittivity) -> Box<dyn RelativePermittivity> {
+        match model {
+            Permittivity::Constant(d) => Box::new(d),
+            Permittivity::Empirical(d) => Box::new(d),
+            Permittivity::Water => Box::new(WATER),
+            Permittivity::Ethanol => Box::new(ETHANOL),
+            Permittivity::Methanol => Box::new(METHANOL),
+            Permittivity::Metal => Box::new(METAL),
+            Permittivity::Vacuum => Box::new(VACUUM),
+            Permittivity::Water25 => Box::new(WATER_25C),
+        }
+    }
+}
+
 /// Perfect conductor with infinite permittivity, εᵣ = ∞
 pub const METAL: ConstantPermittivity = ConstantPermittivity::new(f64::INFINITY);
 
