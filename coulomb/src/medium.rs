@@ -17,6 +17,8 @@ use crate::*;
 use anyhow::Result;
 use core::fmt::{Display, Formatter};
 use permittivity::{ConstantPermittivity, Permittivity};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// # Implicit solvent medium such as water or a salt solution
 ///
@@ -46,6 +48,11 @@ use permittivity::{ConstantPermittivity, Permittivity};
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 /// ~~~
 #[derive(Clone)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(deny_unknown_fields)
+)]
 pub struct Medium {
     /// Relative permittivity of the medium
     permittivity: Permittivity,
