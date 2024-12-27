@@ -97,7 +97,7 @@ impl Medium {
 
     /// Change the molarity of the salt solution. Error if no salt type is defined.
     pub fn set_molarity(&mut self, molality: f64) -> Result<()> {
-        if molality < 0.0 {
+        if molality.is_sign_negative() || !molality.is_finite() {
             anyhow::bail!("Molarity must be positive")
         }
         let Some((salt, _)) = &self.salt else {

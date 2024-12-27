@@ -26,7 +26,7 @@ pub trait RelativePermittivity: DynClone {
     /// Relative permittivity or error if temperature is out of range.
     fn permittivity(&self, temperature: f64) -> Result<f64>;
 
-    /// Test is temperature is within range
+    /// Test if temperature is within range
     fn temperature_is_ok(&self, temperature: f64) -> bool {
         self.permittivity(temperature).is_ok()
     }
