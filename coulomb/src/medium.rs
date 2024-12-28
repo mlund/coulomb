@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 /// approx::assert_abs_diff_eq!(medium.ionic_strength().unwrap(), 0.3);
 /// approx::assert_abs_diff_eq!(medium.debye_length().unwrap(), 5.548902662386284);
 /// ~~~
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
