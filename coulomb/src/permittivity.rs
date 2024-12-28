@@ -40,8 +40,14 @@ dyn_clone::clone_trait_object!(RelativePermittivity);
 
 /// Enum for all available permittivity models
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(deny_unknown_fields)
+)]
 pub enum Permittivity {
+    /// Custom constant permittivity, independent of temperature
+    Fixed(f64),
     /// Custom constant permittivity, independent of temperature
     Constant(ConstantPermittivity),
     /// Custom empirical permittivity model with temperature dependence
@@ -69,6 +75,7 @@ impl RelativePermittivity for Permittivity {
 impl From<Permittivity> for Box<dyn RelativePermittivity> {
     fn from(model: Permittivity) -> Box<dyn RelativePermittivity> {
         match model {
+            Permittivity::Fixed(d) => Box::new(ConstantPermittivity::from(d)),
             Permittivity::Constant(d) => Box::new(d),
             Permittivity::Empirical(d) => Box::new(d),
             Permittivity::Water => Box::new(WATER),
@@ -84,6 +91,7 @@ impl From<Permittivity> for Box<dyn RelativePermittivity> {
 impl Display for Permittivity {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Permittivity::Fixed(d) => write!(f, "{}", d),
             Permittivity::Constant(d) => write!(f, "{}", d),
             Permittivity::Empirical(d) => write!(f, "{}", d),
             Permittivity::Water => write!(f, "{}", WATER),
