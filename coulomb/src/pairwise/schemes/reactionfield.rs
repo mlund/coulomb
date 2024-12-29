@@ -67,6 +67,16 @@ impl Display for ReactionField {
     }
 }
 
+impl DebyeLength for ReactionField {
+    #[inline]
+    fn debye_length(&self) -> Option<f64> {
+        self.kappa().map(f64::recip)
+    }
+    fn kappa(&self) -> Option<f64> {
+        None
+    }
+}
+
 impl ReactionField {
     /// Create a new reaction-field potential
     ///
@@ -130,9 +140,6 @@ impl ShortRangeFunction for ReactionField {
         "https://doi.org/dscmwg"
     }
 
-    fn kappa(&self) -> Option<f64> {
-        None
-    }
     fn short_range_f0(&self, q: f64) -> f64 {
         let f = 1.0
             + (self.dielec_out - self.dielec_in) * q.powi(3)

@@ -15,6 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+use crate::debye_length::DebyeLength;
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 use num::integer::binomial;
 #[cfg(feature = "serde")]
@@ -189,6 +190,13 @@ impl<const C: i32, const D: i32> crate::Cutoff for Poisson<C, D> {
     }
 }
 
+impl<const C: i32, const D: i32> crate::DebyeLength for Poisson<C, D> {
+    #[inline]
+    fn kappa(&self) -> Option<f64> {
+        self.screening.as_ref().map(|s| s.kappa)
+    }
+}
+
 impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
     fn url() -> &'static str {
         match (C, D) {
@@ -203,10 +211,6 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             (4, 3) => "https://doi.org/10.1063/1.3216520", // fanourgakis
             _ => "https://doi.org/c5fr",                   // generic poisson
         }
-    }
-
-    fn kappa(&self) -> Option<f64> {
-        self.screening.as_ref().map(|s| s.kappa)
     }
 
     fn short_range_f0(&self, q: f64) -> f64 {

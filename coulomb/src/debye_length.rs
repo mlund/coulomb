@@ -11,14 +11,16 @@ pub trait DebyeLength {
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
-    fn debye_length(&self) -> Option<f64>;
+    fn debye_length(&self) -> Option<f64> {
+        self.kappa().map(f64::recip)
+    }
+
     /// Inverse Debye length in inverse angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
-    fn kappa(&self) -> Option<f64> {
-        self.debye_length().map(f64::recip)
-    }
+    fn kappa(&self) -> Option<f64>;
+
     /// Tries to set the debye length to a new value.
     fn set_debye_length(&mut self, _debye_length: Option<f64>) -> anyhow::Result<()> {
         anyhow::bail!("Setting the Debye length is not supported");
@@ -35,6 +37,9 @@ where
         let permittivity = self.permittivity(temperature).unwrap();
         self.ionic_strength()
             .map(|i| debye_length(temperature, permittivity, i))
+    }
+    fn kappa(&self) -> Option<f64> {
+        self.debye_length().map(f64::recip)
     }
 }
 

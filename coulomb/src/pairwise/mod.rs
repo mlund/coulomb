@@ -47,10 +47,12 @@ mod field;
 mod force;
 mod potential;
 mod schemes;
+use crate::DebyeLength;
 pub use schemes::{
     ewald::*, ewald_truncated::EwaldTruncated, plain::Plain, poisson::*,
     reactionfield::ReactionField,
 };
+
 pub use {
     energy::MultipoleEnergy, field::MultipoleField, force::MultipoleForce,
     potential::MultipolePotential,
@@ -79,18 +81,11 @@ impl<T: MultipolePotential + MultipoleField> MultipoleEnergy for T {}
 /// _splitting function_.
 /// There it is used to split the electrostatic interaction into a short-range part and
 /// a long-range part.
-pub trait ShortRangeFunction {
+pub trait ShortRangeFunction: DebyeLength {
     /// URL to the original article describing the short-range function.
     fn url() -> &'static str
     where
         Self: Sized;
-
-    /// Inverse Debye screening length.
-    ///
-    /// The default implementation returns `None`.
-    fn kappa(&self) -> Option<f64> {
-        None
-    }
 
     /// Short-range function, 𝑆(𝑞)
     fn short_range_f0(&self, q: f64) -> f64;

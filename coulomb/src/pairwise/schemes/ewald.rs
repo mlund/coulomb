@@ -15,6 +15,8 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 
+#[cfg(test)]
+use crate::debye_length::DebyeLength;
 use crate::math::erfc_x;
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 #[cfg(test)]
@@ -120,16 +122,18 @@ impl crate::Cutoff for RealSpaceEwald {
     }
 }
 
+impl crate::DebyeLength for RealSpaceEwald {
+    #[inline]
+    fn kappa(&self) -> Option<f64> {
+        self.zeta.map(|z| z / self.cutoff)
+    }
+}
+
 impl ShortRangeFunction for RealSpaceEwald {
     fn url() -> &'static str {
         "https://doi.org/fcjts8"
     }
 
-    /// The inverse Debye length if salt is present, otherwise `None`.
-    #[inline]
-    fn kappa(&self) -> Option<f64> {
-        self.zeta.map(|z| z / self.cutoff)
-    }
     #[inline]
     fn short_range_f0(&self, q: f64) -> f64 {
         if let Some(zeta) = self.zeta {

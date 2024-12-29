@@ -123,15 +123,18 @@ impl crate::Cutoff for Plain {
     }
 }
 
+impl DebyeLength for Plain {
+    #[inline]
+    fn kappa(&self) -> Option<f64> {
+        self.kappa
+    }
+}
+
 impl ShortRangeFunction for Plain {
     fn url() -> &'static str {
         "https://doi.org/msxd"
     }
 
-    #[inline]
-    fn kappa(&self) -> Option<f64> {
-        self.kappa
-    }
     #[inline]
     fn short_range_f0(&self, _q: f64) -> f64 {
         1.0

@@ -75,6 +75,12 @@ impl<'de> Deserialize<'de> for EwaldTruncated {
     }
 }
 
+impl crate::DebyeLength for EwaldTruncated {
+    fn kappa(&self) -> Option<f64> {
+        None
+    }
+}
+
 impl EwaldTruncated {
     /// Inverse square root of pi, 1/sqrt(pi)
     const FRAC_1_SQRT_PI: f64 = 0.5 * core::f64::consts::FRAC_2_SQRT_PI;
@@ -113,9 +119,6 @@ impl ShortRangeFunction for EwaldTruncated {
             monopole: Some(c1),
             dipole: Some(c2),
         }
-    }
-    fn kappa(&self) -> Option<f64> {
-        None
     }
     fn short_range_f0(&self, q: f64) -> f64 {
         (erfc_x(self.eta * q)
