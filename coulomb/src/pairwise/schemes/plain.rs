@@ -128,6 +128,10 @@ impl DebyeLength for Plain {
     fn kappa(&self) -> Option<f64> {
         self.kappa
     }
+    fn set_debye_length(&mut self, debye_length: Option<f64>) -> anyhow::Result<()> {
+        self.kappa = debye_length.map(f64::recip);
+        Ok(())
+    }
 }
 
 impl ShortRangeFunction for Plain {

@@ -127,6 +127,10 @@ impl crate::DebyeLength for RealSpaceEwald {
     fn kappa(&self) -> Option<f64> {
         self.zeta.map(|z| z / self.cutoff)
     }
+    fn set_debye_length(&mut self, debye_length: Option<f64>) -> anyhow::Result<()> {
+        self.zeta = debye_length.map(|d| self.cutoff / d);
+        Ok(())
+    }
 }
 
 impl ShortRangeFunction for RealSpaceEwald {

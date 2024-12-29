@@ -77,6 +77,18 @@ struct Screening {
     pub yukawa_denom: f64,
 }
 
+impl Screening {
+    fn new(debye_length: f64, cutoff: f64) -> Self {
+        let reduced_kappa = cutoff / debye_length;
+        Screening {
+            kappa: 1.0 / debye_length,
+            reduced_kappa,
+            reduced_kappa_squared: reduced_kappa.powi(2),
+            yukawa_denom: 1.0 / (1.0 - (2.0 * reduced_kappa).exp()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Poisson<const C: i32, const D: i32> {
@@ -158,15 +170,7 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         let _has_dipolar_selfenergy = C >= 2;
 
-        let screening = debye_length.map(|debye_length| {
-            let reduced_kappa = cutoff / debye_length;
-            Screening {
-                kappa: 1.0 / debye_length,
-                reduced_kappa,
-                reduced_kappa_squared: reduced_kappa.powi(2),
-                yukawa_denom: 1.0 / (1.0 - (2.0 * reduced_kappa).exp()),
-            }
-        });
+        let screening = debye_length.map(|d| Screening::new(d, cutoff));
 
         let binom_cdc = if screening.is_some() || D != -C {
             f64::from(binomial(C + D, C) * D)
@@ -194,6 +198,10 @@ impl<const C: i32, const D: i32> crate::DebyeLength for Poisson<C, D> {
     #[inline]
     fn kappa(&self) -> Option<f64> {
         self.screening.as_ref().map(|s| s.kappa)
+    }
+    fn set_debye_length(&mut self, debye_length: Option<f64>) -> anyhow::Result<()> {
+        self.screening = debye_length.map(|d| Screening::new(d, self.cutoff));
+        Ok(())
     }
 }
 

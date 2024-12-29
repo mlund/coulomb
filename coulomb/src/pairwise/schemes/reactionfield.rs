@@ -69,9 +69,6 @@ impl Display for ReactionField {
 
 impl DebyeLength for ReactionField {
     #[inline]
-    fn debye_length(&self) -> Option<f64> {
-        self.kappa().map(f64::recip)
-    }
     fn kappa(&self) -> Option<f64> {
         None
     }
