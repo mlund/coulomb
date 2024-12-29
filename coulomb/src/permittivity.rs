@@ -17,12 +17,11 @@
 use anyhow::Result;
 use core::fmt;
 use core::fmt::{Display, Formatter};
-use dyn_clone::DynClone;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Trait for objects that has a relative permittivity
-pub trait RelativePermittivity: DynClone {
+pub trait RelativePermittivity {
     /// Relative permittivity or error if temperature is out of range.
     fn permittivity(&self, temperature: f64) -> Result<f64>;
 
@@ -34,9 +33,12 @@ pub trait RelativePermittivity: DynClone {
     fn to_const_permittivity(&self, temperature: f64) -> Result<ConstantPermittivity> {
         Ok(ConstantPermittivity::new(self.permittivity(temperature)?))
     }
+    /// Tries to set the permittivity to a constant value
+    fn set_permittivity(&mut self, permittivity: f64) -> Result<()> {
+        let _ = permittivity;
+        anyhow::bail!("Cannot set permittivity for this model")
+    }
 }
-
-dyn_clone::clone_trait_object!(RelativePermittivity);
 
 /// Enum for all available permittivity models
 #[derive(Debug, PartialEq, Clone)]
@@ -172,6 +174,10 @@ impl From<f64> for ConstantPermittivity {
 impl RelativePermittivity for ConstantPermittivity {
     fn permittivity(&self, _: f64) -> Result<f64> {
         Ok(self.permittivity)
+    }
+    fn set_permittivity(&mut self, permittivity: f64) -> Result<()> {
+        self.permittivity = permittivity;
+        Ok(())
     }
 }
 
