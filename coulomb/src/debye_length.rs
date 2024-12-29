@@ -19,6 +19,10 @@ pub trait DebyeLength {
     fn kappa(&self) -> Option<f64> {
         self.debye_length().map(f64::recip)
     }
+    /// Tries to set the debye length to a new value.
+    fn set_debye_length(&mut self, _debye_length: f64) -> anyhow::Result<()> {
+        anyhow::bail!("Setting the Debye length is not supported");
+    }
 }
 
 // Implement DebyeLength for all types that implement Temperature and RelativePermittivity
