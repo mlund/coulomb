@@ -62,8 +62,6 @@ pub struct Medium {
     temperature: f64,
 }
 
-impl DebyeLength for Medium {}
-
 impl Medium {
     /// Creates a new medium
     pub fn new(temperature: f64, permittivity: Permittivity, salt: Option<(Salt, f64)>) -> Self {

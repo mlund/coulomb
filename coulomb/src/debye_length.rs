@@ -6,23 +6,31 @@ use physical_constants::{
 use std::f64::consts::PI;
 
 /// Trait for objects where a Debye length can be calculated
-pub trait DebyeLength: IonicStrength + permittivity::RelativePermittivity + Temperature {
+pub trait DebyeLength {
     /// # Debye length in angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
-    fn debye_length(&self) -> Option<f64> {
-        let temperature = self.temperature();
-        let permittivity = self.permittivity(temperature).unwrap();
-        self.ionic_strength()
-            .map(|i| debye_length(temperature, permittivity, i))
-    }
+    fn debye_length(&self) -> Option<f64>;
     /// Inverse Debye length in inverse angstrom or `None` if the ionic strength is zero.
     ///
     /// May perform expensive operations so avoid use in speed critical code,
     /// such as inside tight interaction loops.
     fn kappa(&self) -> Option<f64> {
         self.debye_length().map(f64::recip)
+    }
+}
+
+// Implement DebyeLength for all types that implement Temperature and RelativePermittivity
+impl<T> DebyeLength for T
+where
+    T: Temperature + IonicStrength + permittivity::RelativePermittivity,
+{
+    fn debye_length(&self) -> Option<f64> {
+        let temperature = self.temperature();
+        let permittivity = self.permittivity(temperature).unwrap();
+        self.ionic_strength()
+            .map(|i| debye_length(temperature, permittivity, i))
     }
 }
 
