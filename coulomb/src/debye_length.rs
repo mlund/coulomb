@@ -20,7 +20,7 @@ pub trait DebyeLength {
         self.debye_length().map(f64::recip)
     }
     /// Tries to set the debye length to a new value.
-    fn set_debye_length(&mut self, _debye_length: f64) -> anyhow::Result<()> {
+    fn set_debye_length(&mut self, _debye_length: Option<f64>) -> anyhow::Result<()> {
         anyhow::bail!("Setting the Debye length is not supported");
     }
 }
