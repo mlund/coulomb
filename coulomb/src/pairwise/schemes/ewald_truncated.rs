@@ -20,6 +20,7 @@ use crate::{math::erf_x, math::erfc_x, Cutoff};
 use core::f64::consts::FRAC_2_SQRT_PI;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize};
+use std::fmt::Display;
 
 /// Truncated Gaussian Ewald scheme (real-space part).
 ///
@@ -141,6 +142,16 @@ impl ShortRangeFunction for EwaldTruncated {
             * (-(self.eta * q).powi(2)).exp()
             * FRAC_2_SQRT_PI
             * self.f0
+    }
+}
+
+impl Display for EwaldTruncated {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "EwaldTruncated {{ cutoff: {}, alpha: {} }}",
+            self.cutoff, self.alpha
+        )
     }
 }
 

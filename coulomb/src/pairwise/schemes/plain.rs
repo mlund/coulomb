@@ -85,7 +85,7 @@ impl core::fmt::Display for Plain {
         if let Some(debye_length) = self.kappa.map(f64::recip) {
             write!(
                 f,
-                ", λᴰ = {:.1}, λᴰ/𝑟✂ = {:.1}",
+                ", λᴰ = {:.1}, λᴰ/𝑟✂ = {:.1e}",
                 debye_length,
                 debye_length / self.cutoff
             )?;
@@ -306,7 +306,7 @@ fn test_coulomb() {
 
     assert_eq!(
         pot.to_string(),
-        "Plain Coulomb: 𝑟✂ = 29.0, λᴰ = 23.0, λᴰ/𝑟✂ = 0.8 <https://doi.org/msxd>"
+        "Plain Coulomb: 𝑟✂ = 29.0, λᴰ = 23.0, λᴰ/𝑟✂ = 7.9e-1 <https://doi.org/msxd>"
     );
 
     assert_relative_eq!(pot.ion_potential(z1, cutoff + 1.0), 0.0, epsilon = eps);

@@ -143,7 +143,7 @@ pub const ETHANOL: EmpiricalPermittivity = EmpiricalPermittivity::new(
 /// assert!(dielec.temperature_is_ok(f64::INFINITY));
 ///
 /// assert_eq!(VACUUM.permittivity(298.15).unwrap(), 1.0);
-/// assert_eq!(METAL.to_string(), "εᵣ = ∞ for all 𝑇");
+/// assert_eq!(METAL.to_string(), "εᵣ = ∞");
 /// ~~~
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -185,7 +185,7 @@ impl Display for ConstantPermittivity {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "εᵣ = {} for all 𝑇",
+            "εᵣ = {}",
             match self.permittivity.is_infinite() {
                 true => "∞".to_string(),
                 false => format!("{:.2}", self.permittivity),
