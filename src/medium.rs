@@ -122,7 +122,7 @@ impl Display for Medium {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Medium: 𝑇 = {:.2} K, εᵣ = {:.1}, λᴮ = {:.1} Å",
+            "Medium: 𝑇 = {:.2} K, εᵣ = {:.2}, λᴮ = {:.2} Å",
             self.temperature,
             self.permittivity.permittivity(self.temperature).unwrap(),
             self.bjerrum_length(),
@@ -130,7 +130,7 @@ impl Display for Medium {
         if let Some((salt, molarity)) = &self.salt {
             write!(
                 f,
-                ", 𝐼 = {:.1} mM, λᴰ = {:.1} Å, {:.1} M {}",
+                ", 𝐼 = {:.2} mM, λᴰ = {:.2} Å, {:.2} M {}",
                 self.ionic_strength().unwrap() * 1e3,
                 self.debye_length().unwrap(),
                 molarity,
