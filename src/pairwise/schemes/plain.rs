@@ -344,6 +344,25 @@ fn test_coulomb() {
     assert_relative_eq!(field[0], 0.002872404612, epsilon = eps);
     assert_relative_eq!(field[1], -0.0004233017324, epsilon = eps);
     assert_relative_eq!(field[2], -0.0006651884364, epsilon = eps);
+
+    // Test ion-induced dipole energy
+    let pot = Plain::new(cutoff, None);
+    let alpha = 50.0; // excess polarizability (length^3)
+    let charge = 1.0; // charge
+    let r_vec = Vector3::new(5.0, 0.0, 0.0); // distance vector
+    let energy = pot.ion_induced_dipole_energy(charge, alpha, &r_vec);
+    assert_relative_eq!(energy, -0.04, epsilon = eps);
+
+    // Manually calculate the energy,
+    // see e.g. J. Israelachvili, "Intermolecular and Surface Forces"
+    // energy = -0.5 * |E|^2 * alpha
+    let r4 = r_vec.norm_squared().powi(2);
+    assert_relative_eq!(energy, -0.5 * charge * charge * alpha / r4, epsilon = eps);
+
+    // with non-zero kappa
+    let pot = Plain::new(cutoff, Some(10.0));
+    let energy = pot.ion_induced_dipole_energy(charge, alpha, &r_vec);
+    assert_relative_eq!(energy, -0.0331091497054298, epsilon = eps);
 }
 
 #[cfg(feature = "uom")]

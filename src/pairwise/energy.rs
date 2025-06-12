@@ -56,6 +56,22 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
         charge2 * self.ion_potential(charge1, r)
     }
 
+    /// Ion-induced dipole energy
+    ///
+    /// - `charge`: Point charge, UNIT: [input charge]
+    /// - `alpha`: Isotropic, excess polarizability, UNIT: [(input length)^3 / (input charge)]
+    /// - `r`: Distance-vector between ion and induced dipole, r = r_mu - r_z, UNIT: [input length]
+    ///
+    /// The input polarizability is the radius on the indiced site, scaled with a unit-less
+    /// excess polarizability.
+    fn ion_induced_dipole_energy(&self, charge: f64, alpha: f64, r: &Vector3) -> f64 {
+        // This is equivalent to:
+        // let field = self.ion_field(charge, &r);
+        // let induced_dipole = field.scale(alpha);
+        // 0.5 * self.ion_dipole_energy(charge, &induced_dipole, &r)
+        -0.5 * self.ion_field(charge, r).norm_squared() * alpha
+    }
+
     /// Interaction energy between a point charge and a point dipole
     ///
     /// - `charge`: Point charge, UNIT: [input charge]
