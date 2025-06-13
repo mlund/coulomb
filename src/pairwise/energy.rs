@@ -64,12 +64,17 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     ///
     /// The input polarizability is the radius on the indiced site, scaled with a unit-less
     /// excess polarizability.
+    ///
+    /// TODO: Polarizability should ideally be a tensor
     fn ion_induced_dipole_energy(&self, charge: f64, alpha: f64, r: &Vector3) -> f64 {
-        // This is equivalent to:
-        // let field = self.ion_field(charge, &r);
-        // let induced_dipole = field.scale(alpha);
-        // 0.5 * self.ion_dipole_energy(charge, &induced_dipole, &r)
-        -0.5 * self.ion_field(charge, r).norm_squared() * alpha
+        #[cfg(any())]
+        {
+            // Spelled-out, equivalent version:
+            let field = self.ion_field(charge, &r);
+            let induced_dipole = field.scale(alpha);
+            0.5 * self.ion_dipole_energy(charge, &induced_dipole, &r)
+        }
+        self.ion_field(charge, r).norm_squared() * (-0.5 * alpha)
     }
 
     /// Interaction energy between a point charge and a point dipole
