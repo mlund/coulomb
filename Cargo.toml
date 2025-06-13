@@ -14,13 +14,12 @@ keywords = ["electrolytes", "electrostatics", "simulation", "multipoles", "chemi
 
 [dependencies]
 anyhow = "1.0"
-dyn-clone = "1.0"
-itertools = "0.10"
-nalgebra = "0.33"
+itertools = { version = "0.10", default-features = false, features = ["use_std"] }
+nalgebra = { version = "0.33", default-features = false, features = ["std"] }
 num = "0.4"
 num-integer = "0.1"
 physical_constants = "0.5"
-serde = { version = "1.0", features = ["derive"], optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true, default-features = false }
 uom = { version = "0.36", optional = true, features = ["si", "f64"], default-features = false }
 
 [features]
