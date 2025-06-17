@@ -84,7 +84,7 @@ extern crate approx;
 #[macro_use]
 extern crate uom;
 #[cfg(feature = "uom")]
-mod units;
+pub mod units;
 
 /// A point in 3D space
 pub type Vector3 = nalgebra::Vector3<f64>;
