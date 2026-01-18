@@ -5,6 +5,11 @@ pub trait Cutoff {
         self.cutoff().powi(2)
     }
 
-    /// Cutoff distance
+    /// Cutoff distance (upper)
     fn cutoff(&self) -> f64;
+
+    /// Cutoff distance (lower)
+    fn lower_cutoff(&self) -> f64 {
+        0.0
+    }
 }
