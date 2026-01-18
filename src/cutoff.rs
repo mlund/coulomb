@@ -12,4 +12,9 @@ pub trait Cutoff {
     fn lower_cutoff(&self) -> f64 {
         0.0
     }
+
+    /// Test if cutoff is finite
+    fn is_finite(&self) -> bool {
+        self.cutoff_squared().is_finite()
+    }
 }
