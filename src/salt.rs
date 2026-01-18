@@ -121,7 +121,7 @@ impl Salt {
     pub fn ionic_strength(&self, molarity: f64) -> f64 {
         0.5 * molarity
             * std::iter::zip(self.valencies(), self.stoichiometry().iter().copied())
-                .map(|(valency, nu)| (nu * valency.pow(2) as usize))
+                .map(|(valency, nu)| nu * valency.pow(2) as usize)
                 .sum::<usize>() as f64
     }
 }
