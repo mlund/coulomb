@@ -57,7 +57,7 @@ pub trait MultipoleFieldSI: MultipoleField {
         distance: crate::units::Length,
     ) -> crate::units::ElectricField {
         use crate::units::*;
-        use num::Zero;
+        use num_traits::Zero;
         use uom::si::electric_charge_areal_density::ElectricChargeArealDensity;
 
         let r = distance.get::<angstrom>();

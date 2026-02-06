@@ -17,14 +17,15 @@ anyhow = "1.0"
 itertools = { version = "0.10", default-features = false, features = ["use_std"] }
 mint = "0.5"
 nalgebra = { version = "0.34.1", default-features = false, features = ["std", "mint"] }
-num = "0.4"
 num-integer = "0.1"
+num-traits = { version = "0.2", optional = true }
 physical_constants = "0.5"
 serde = { version = "1.0", features = ["derive"], optional = true, default-features = false }
 uom = { version = "0.36", optional = true, features = ["si", "f64"], default-features = false }
 
 [features]
 default = ["uom"]
+uom = ["dep:uom", "dep:num-traits"]
 serde = ["dep:serde"]
 
 [dev-dependencies]

@@ -17,7 +17,7 @@
 
 use crate::debye_length::DebyeLength;
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
-use num::integer::binomial;
+use num_integer::binomial;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize};
 
