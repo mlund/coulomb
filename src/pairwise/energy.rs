@@ -18,7 +18,7 @@
 //! Multipole interaction energies.
 
 use super::{MultipoleField, MultipolePotential};
-use crate::{Matrix3, Vector3};
+use crate::{Matrix3, NalgebraVector3, Vector3};
 
 /// Interaction energy between multipoles.
 pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
@@ -66,15 +66,10 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// excess polarizability.
     ///
     /// TODO: Polarizability should ideally be a tensor
-    fn ion_induced_dipole_energy(&self, charge: f64, alpha: f64, r: &Vector3) -> f64 {
-        #[cfg(any())]
-        {
-            // Spelled-out, equivalent version:
-            let field = self.ion_field(charge, &r);
-            let induced_dipole = field.scale(alpha);
-            0.5 * self.ion_dipole_energy(charge, &induced_dipole, &r)
-        }
-        self.ion_field(charge, r).norm_squared() * (-0.5 * alpha)
+    fn ion_induced_dipole_energy(&self, charge: f64, alpha: f64, r: impl Into<Vector3>) -> f64 {
+        let r: NalgebraVector3 = r.into().into();
+        let field: NalgebraVector3 = self.ion_field(charge, r).into();
+        field.norm_squared() * (-0.5 * alpha)
     }
 
     /// Interaction energy between a point charge and a point dipole
@@ -95,10 +90,17 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// $$u(z, \mu, r) = -\mu.dot(E(z, r))$$
     ///
     /// where $E(z, r)$ is the field from the ion at the location of the dipole.
-    fn ion_dipole_energy(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> f64 {
+    fn ion_dipole_energy(
+        &self,
+        charge: f64,
+        dipole: impl Into<Vector3>,
+        r: impl Into<Vector3>,
+    ) -> f64 {
+        let dipole: NalgebraVector3 = dipole.into().into();
+        let r: NalgebraVector3 = r.into().into();
         // Both expressions below give the same answer. Keep for possible optimization in the future.
         // return -dipole_moment.dot(self.ion_field(charge, r)); // field from charge interacting with dipole
-        charge * self.dipole_potential(dipole, &(-r)) // potential of dipole interacting with charge
+        charge * self.dipole_potential(dipole, -r) // potential of dipole interacting with charge
     }
 
     /// Interaction energy between two point dipoles
@@ -112,8 +114,16 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// The interaction energy between two dipoles is described by:
     ///     u(mu1, mu2, r) = -mu1.dot(E(mu2, r))
     /// where E(mu2, r) is the field from dipole 2 at the location of dipole 1.
-    fn dipole_dipole_energy(&self, dipole1: &Vector3, dipole2: &Vector3, r: &Vector3) -> f64 {
-        -dipole1.dot(&self.dipole_field(dipole2, r))
+    fn dipole_dipole_energy(
+        &self,
+        dipole1: impl Into<Vector3>,
+        dipole2: impl Into<Vector3>,
+        r: impl Into<Vector3>,
+    ) -> f64 {
+        let dipole1: NalgebraVector3 = dipole1.into().into();
+        let dipole2: NalgebraVector3 = dipole2.into().into();
+        let field: NalgebraVector3 = self.dipole_field(dipole2, r).into();
+        -dipole1.dot(&field)
     }
 
     /// Interaction energy between a point charge and a point quadrupole
@@ -127,7 +137,13 @@ pub trait MultipoleEnergy: MultipolePotential + MultipoleField {
     /// The interaction energy between an ion and a quadrupole is described by:
     ///     u(z, Q, r) = z * Phi(Q, -r)
     /// where Phi(Q, -r) is the potential from the quadrupole at the location of the ion.
-    fn ion_quadrupole_energy(&self, charge: f64, quad: &Matrix3, r: &Vector3) -> f64 {
-        charge * self.quadrupole_potential(quad, &(-r)) // potential of quadrupole interacting with charge
+    fn ion_quadrupole_energy(
+        &self,
+        charge: f64,
+        quad: impl Into<Matrix3>,
+        r: impl Into<Vector3>,
+    ) -> f64 {
+        let r: NalgebraVector3 = r.into().into();
+        charge * self.quadrupole_potential(quad, -r) // potential of quadrupole interacting with charge
     }
 }

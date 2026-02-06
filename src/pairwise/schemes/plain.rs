@@ -159,24 +159,25 @@ impl ShortRangeFunction for Plain {
 
 #[test]
 fn test_coulomb() {
-    use crate::{Matrix3, Vector3};
+    use super::test_utils::{assert_vec3_eq, assert_vec_x_equals_norm, assert_vec_zero};
+    use crate::{NalgebraMatrix3 as Matrix3, NalgebraVector3 as Vector3};
     use approx::assert_relative_eq;
 
     use crate::pairwise::{MultipoleEnergy, MultipoleField, MultipoleForce, MultipolePotential};
-    let cutoff: f64 = 29.0; // cutoff distance
-    let z1 = 2.0; // charge
-    let z2 = 3.0; // charge
-    let mu1 = Vector3::new(19.0, 7.0, 11.0); // dipole moment
-    let mu2 = Vector3::new(13.0, 17.0, 5.0); // dipole moment
-    let quad1 = Matrix3::new(3.0, 7.0, 8.0, 5.0, 9.0, 6.0, 2.0, 1.0, 4.0); // quadrupole moment
-    let _quad2 = Matrix3::zeros(); // quadrupole moment
-    let r = Vector3::new(23.0, 0.0, 0.0); // distance vector
+    let cutoff: f64 = 29.0;
+    let z1 = 2.0;
+    let z2 = 3.0;
+    let mu1 = Vector3::new(19.0, 7.0, 11.0);
+    let mu2 = Vector3::new(13.0, 17.0, 5.0);
+    let quad1 = Matrix3::new(3.0, 7.0, 8.0, 5.0, 9.0, 6.0, 2.0, 1.0, 4.0);
+    let _quad2 = Matrix3::zeros();
+    let r = Vector3::new(23.0, 0.0, 0.0);
     let rq = Vector3::new(
         5.75 * (6.0f64).sqrt(),
         5.75 * (2.0f64).sqrt(),
         11.5 * (2.0f64).sqrt(),
-    ); // distance vector for quadrupole check
-    let rh = Vector3::new(1.0, 0.0, 0.0); // normalized distance vector
+    );
+    let rh = Vector3::new(1.0, 0.0, 0.0);
 
     let pot = Plain::new(cutoff, None);
     let eps = 1e-9;
@@ -200,106 +201,84 @@ fn test_coulomb() {
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.dipole_potential(&mu1, &((cutoff + 1.0) * rh)),
+        pot.dipole_potential(mu1, (cutoff + 1.0) * rh),
         0.0,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.dipole_potential(&mu1, &r),
+        pot.dipole_potential(mu1, r),
         0.035916824196597356,
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.quadrupole_potential(&quad1, &rq),
+        pot.quadrupole_potential(quad1, rq),
         0.00093632817,
         epsilon = eps
     );
 
     // Test fields
-    assert_relative_eq!(
-        pot.ion_field(z1, &((cutoff + 1.0) * rh)).norm(),
-        0.0,
-        epsilon = eps
+    assert_vec_zero!(pot.ion_field(z1, (cutoff + 1.0) * rh), eps);
+    assert_vec_x_equals_norm!(pot.ion_field(z1, r), 0.003780718336, eps);
+    assert_vec_zero!(pot.dipole_field(mu1, (cutoff + 1.0) * rh), eps);
+    assert_vec3_eq!(
+        pot.dipole_field(mu1, r),
+        [0.003123202104, -0.0005753267034, -0.0009040848196],
+        eps
     );
-    let ion_field = pot.ion_field(z1, &r);
-    assert_relative_eq!(ion_field[0], 0.003780718336, epsilon = eps);
-    assert_relative_eq!(ion_field.norm(), 0.003780718336, epsilon = eps);
-    assert_relative_eq!(
-        pot.dipole_field(&mu1, &((cutoff + 1.0) * rh)).norm(),
-        0.0,
-        epsilon = eps
+    assert_vec3_eq!(
+        pot.quadrupole_field(quad1, r),
+        [-0.00003752130674, -0.00006432224013, -0.00005360186677],
+        eps
     );
-    let dip_field = pot.dipole_field(&mu1, &r);
-    assert_relative_eq!(dip_field[0], 0.003123202104, epsilon = eps);
-    assert_relative_eq!(dip_field[1], -0.0005753267034, epsilon = eps);
-    assert_relative_eq!(dip_field[2], -0.0009040848196, epsilon = eps);
-    let quad_field = pot.quadrupole_field(&quad1, &r);
-    assert_relative_eq!(quad_field[0], -0.00003752130674, epsilon = eps);
-    assert_relative_eq!(quad_field[1], -0.00006432224013, epsilon = eps);
-    assert_relative_eq!(quad_field[2], -0.00005360186677, epsilon = eps);
 
     // Test energies
-    approx::assert_relative_eq!(pot.ion_ion_energy(z1, z2, cutoff + 1.0), 0.0, epsilon = eps);
-    approx::assert_relative_eq!(
+    assert_relative_eq!(pot.ion_ion_energy(z1, z2, cutoff + 1.0), 0.0, epsilon = eps);
+    assert_relative_eq!(
         pot.ion_ion_energy(z1, z2, r.norm()),
         z1 * z2 / r.norm(),
         epsilon = eps
     );
-    approx::assert_relative_eq!(
-        pot.ion_dipole_energy(z1, &mu2, &((cutoff + 1.0) * rh)),
+    assert_relative_eq!(
+        pot.ion_dipole_energy(z1, mu2, (cutoff + 1.0) * rh),
         -0.0,
         epsilon = eps
     );
-    approx::assert_relative_eq!(
-        pot.ion_dipole_energy(z1, &mu2, &r),
+    assert_relative_eq!(
+        pot.ion_dipole_energy(z1, mu2, r),
         -0.04914933837,
         epsilon = eps
     );
-    approx::assert_relative_eq!(
-        pot.dipole_dipole_energy(&mu1, &mu2, &((cutoff + 1.0) * rh)),
+    assert_relative_eq!(
+        pot.dipole_dipole_energy(mu1, mu2, (cutoff + 1.0) * rh),
         -0.0,
         epsilon = eps
     );
-    approx::assert_relative_eq!(
-        pot.dipole_dipole_energy(&mu1, &mu2, &r),
+    assert_relative_eq!(
+        pot.dipole_dipole_energy(mu1, mu2, r),
         -0.02630064930,
         epsilon = eps
     );
-    approx::assert_relative_eq!(
-        pot.ion_quadrupole_energy(z2, &quad1, &rq),
+    assert_relative_eq!(
+        pot.ion_quadrupole_energy(z2, quad1, rq),
         0.002808984511,
         epsilon = eps
     );
 
     // Test forces
-    assert_relative_eq!(
-        pot.ion_ion_force(z1, z2, &((cutoff + 1.0) * rh)).norm(),
-        0.0,
-        epsilon = eps
+    assert_vec_zero!(pot.ion_ion_force(z1, z2, (cutoff + 1.0) * rh), eps);
+    assert_vec_x_equals_norm!(pot.ion_ion_force(z1, z2, r), 0.01134215501, eps);
+    assert_vec_zero!(pot.ion_dipole_force(z2, mu1, (cutoff + 1.0) * rh), eps);
+    assert_vec3_eq!(
+        pot.ion_dipole_force(z2, mu1, r),
+        [0.009369606312, -0.001725980110, -0.002712254459],
+        eps
     );
-    let force = pot.ion_ion_force(z1, z2, &r);
-    assert_relative_eq!(force[0], 0.01134215501, epsilon = eps);
-    assert_relative_eq!(force.norm(), 0.01134215501, epsilon = eps);
-    assert_relative_eq!(
-        pot.ion_dipole_force(z2, &mu1, &((cutoff + 1.0) * rh))
-            .norm(),
-        0.0,
-        epsilon = eps
+    assert_vec_zero!(pot.dipole_dipole_force(mu1, mu2, (cutoff + 1.0) * rh), eps);
+    assert_vec3_eq!(
+        pot.dipole_dipole_force(mu1, mu2, r),
+        [0.003430519474, -0.004438234569, -0.002551448858],
+        eps
     );
-    let force = pot.ion_dipole_force(z2, &mu1, &r);
-    assert_relative_eq!(force[0], 0.009369606312, epsilon = eps);
-    assert_relative_eq!(force[1], -0.001725980110, epsilon = eps);
-    assert_relative_eq!(force[2], -0.002712254459, epsilon = eps);
-    assert_relative_eq!(
-        pot.dipole_dipole_force(&mu1, &mu2, &((cutoff + 1.0) * rh))
-            .norm(),
-        0.0,
-        epsilon = eps
-    );
-    let force = pot.dipole_dipole_force(&mu1, &mu2, &r);
-    assert_relative_eq!(force[0], 0.003430519474, epsilon = eps);
-    assert_relative_eq!(force[1], -0.004438234569, epsilon = eps);
-    assert_relative_eq!(force[2], -0.002551448858, epsilon = eps);
 
     // Now test with a non-zero kappa
     let pot = Plain::new(cutoff, Some(23.0));
@@ -316,52 +295,42 @@ fn test_coulomb() {
         epsilon = eps
     );
     assert_relative_eq!(
-        pot.dipole_potential(&mu1, &((cutoff + 1.0) * rh)),
+        pot.dipole_potential(mu1, (cutoff + 1.0) * rh),
         0.0,
         epsilon = eps
     );
-    assert_relative_eq!(pot.dipole_potential(&mu1, &r), 0.02642612243, epsilon = eps);
+    assert_relative_eq!(pot.dipole_potential(mu1, r), 0.02642612243, epsilon = eps);
 
     // Test fields
-    assert_relative_eq!(
-        pot.ion_field(z1, &((cutoff + 1.0) * rh)).norm(),
-        0.0,
-        epsilon = eps
-    );
-    let field = pot.ion_field(z1, &r);
-    assert_relative_eq!(field[0], 0.002781697098, epsilon = eps);
-    assert_relative_eq!(field.norm(), 0.002781697098, epsilon = eps);
-    assert_relative_eq!(
-        pot.dipole_field(&mu1, &((cutoff + 1.0) * rh)).norm(),
-        0.0,
-        epsilon = eps
-    );
+    assert_vec_zero!(pot.ion_field(z1, (cutoff + 1.0) * rh), eps);
+    assert_vec_x_equals_norm!(pot.ion_field(z1, r), 0.002781697098, eps);
+    assert_vec_zero!(pot.dipole_field(mu1, (cutoff + 1.0) * rh), eps);
 
     let field_scalar = pot.ion_field_scalar(z1, r.norm());
+    let field: Vector3 = pot.ion_field(z1, r).into();
     assert_relative_eq!(field_scalar, field.norm(), epsilon = eps);
 
-    let field = pot.dipole_field(&mu1, &r);
-    assert_relative_eq!(field[0], 0.002872404612, epsilon = eps);
-    assert_relative_eq!(field[1], -0.0004233017324, epsilon = eps);
-    assert_relative_eq!(field[2], -0.0006651884364, epsilon = eps);
+    assert_vec3_eq!(
+        pot.dipole_field(mu1, r),
+        [0.002872404612, -0.0004233017324, -0.0006651884364],
+        eps
+    );
 
     // Test ion-induced dipole energy
     let pot = Plain::new(cutoff, None);
-    let alpha = 50.0; // excess polarizability (length^3)
-    let charge = 1.0; // charge
-    let r_vec = Vector3::new(5.0, 0.0, 0.0); // distance vector
-    let energy = pot.ion_induced_dipole_energy(charge, alpha, &r_vec);
+    let alpha = 50.0;
+    let charge = 1.0;
+    let r_vec = Vector3::new(5.0, 0.0, 0.0);
+    let energy = pot.ion_induced_dipole_energy(charge, alpha, r_vec);
     assert_relative_eq!(energy, -0.04, epsilon = eps);
 
-    // Manually calculate the energy,
-    // see e.g. J. Israelachvili, "Intermolecular and Surface Forces"
-    // energy = -0.5 * |E|^2 * alpha
+    // Manually calculate the energy
     let r4 = r_vec.norm_squared().powi(2);
     assert_relative_eq!(energy, -0.5 * charge * charge * alpha / r4, epsilon = eps);
 
     // with non-zero kappa
     let pot = Plain::new(cutoff, Some(10.0));
-    let energy = pot.ion_induced_dipole_energy(charge, alpha, &r_vec);
+    let energy = pot.ion_induced_dipole_energy(charge, alpha, r_vec);
     assert_relative_eq!(energy, -0.0331091497054298, epsilon = eps);
 }
 

@@ -215,7 +215,7 @@ impl Andrea {
         error_codes
     }
 
-    pub fn generate<F>(&mut self, func: &F, xmin_squared: f64, xmax_squared: f64) -> Result<Knots>
+    pub fn generate<F>(&self, func: &F, xmin_squared: f64, xmax_squared: f64) -> Result<Knots>
     where
         F: Fn(f64) -> f64,
     {

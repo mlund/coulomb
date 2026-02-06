@@ -15,7 +15,8 @@ keywords = ["electrolytes", "electrostatics", "simulation", "multipoles", "chemi
 [dependencies]
 anyhow = "1.0"
 itertools = { version = "0.10", default-features = false, features = ["use_std"] }
-nalgebra = { version = "0.34.1", default-features = false, features = ["std"] }
+mint = "0.5"
+nalgebra = { version = "0.34.1", default-features = false, features = ["std", "mint"] }
 num = "0.4"
 num-integer = "0.1"
 physical_constants = "0.5"

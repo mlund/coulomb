@@ -81,7 +81,13 @@ fn _dipole_moment(
     positions: impl IntoIterator<Item = crate::Vector3>,
     charges: impl IntoIterator<Item = f64>,
 ) -> crate::Vector3 {
-    zip(positions, charges).map(|(p, q)| p * q).sum()
+    let sum: crate::NalgebraVector3 = zip(positions, charges)
+        .map(|(p, q)| {
+            let p: crate::NalgebraVector3 = p.into();
+            p * q
+        })
+        .sum();
+    sum.into()
 }
 
 pub trait ReciprocalEnergy: ReciprocalState {

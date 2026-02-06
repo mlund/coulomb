@@ -86,10 +86,14 @@ extern crate uom;
 #[cfg(feature = "uom")]
 pub mod units;
 
-/// A point in 3D space
-pub type Vector3 = nalgebra::Vector3<f64>;
-/// A 3x3 matrix
-pub type Matrix3 = nalgebra::Matrix3<f64>;
+/// A point in 3D space (interoperable with other math libraries via mint)
+pub type Vector3 = mint::Vector3<f64>;
+/// A 3x3 matrix (interoperable with other math libraries via mint)
+pub type Matrix3 = mint::ColumnMatrix3<f64>;
+
+// Internal nalgebra types for computations
+pub(crate) type NalgebraVector3 = nalgebra::Vector3<f64>;
+pub(crate) type NalgebraMatrix3 = nalgebra::Matrix3<f64>;
 
 pub(crate) const ANGSTROM_PER_METER: f64 = 1e10;
 pub(crate) const LITER_PER_ANGSTROM3: f64 = 1e-27;

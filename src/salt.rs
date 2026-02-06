@@ -57,7 +57,7 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(Salt::PotassiumAlum.to_string(), "🧂Salt = KAl(SO₄)₂");
 /// ~~~
 ///
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum Salt {
     /// Sodium chloride, NaCl. This is an example of a 1:1 electrolyte and is the default salt type.
@@ -164,7 +164,10 @@ fn test_salt() {
     // NaCl
     assert_eq!(Salt::SodiumChloride.valencies(), [1, -1]);
     assert_eq!(Salt::SodiumChloride.stoichiometry().unwrap(), [1, 1]);
-    approx::assert_abs_diff_eq!(Salt::SodiumChloride.ionic_strength(molarity).unwrap(), molarity);
+    approx::assert_abs_diff_eq!(
+        Salt::SodiumChloride.ionic_strength(molarity).unwrap(),
+        molarity
+    );
 
     // CaSO₄
     assert_eq!(Salt::CalciumSulfate.valencies(), [2, -2]);

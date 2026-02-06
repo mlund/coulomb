@@ -20,8 +20,10 @@
 
 extern crate image;
 
-use coulomb::{pairwise::*, Vector3};
+use coulomb::pairwise::*;
 use image::RgbaImage;
+
+type Vector3 = nalgebra::Vector3<f64>;
 
 const ASPECT_RATIO: f64 = 1.5;
 const WIDTH: u32 = 400;
@@ -44,7 +46,7 @@ impl Particle {
         let r = pos - self.pos;
         let norm = r.norm();
         (norm > self.radius).then(|| {
-            scheme.ion_potential(self.charge, norm) + scheme.dipole_potential(&self.dipole, &r)
+            scheme.ion_potential(self.charge, norm) + scheme.dipole_potential(self.dipole, r)
         })
     }
 }

@@ -15,7 +15,7 @@
 // See the license for the specific language governing permissions and
 // limitations under the license.
 use super::ShortRangeFunction;
-use crate::{Cutoff, Matrix3, Vector3};
+use crate::{Cutoff, Matrix3, NalgebraMatrix3, NalgebraVector3, Vector3};
 
 /// Electric potential from point multipoles.
 ///
@@ -44,7 +44,9 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
     ///
     /// The potential from a point dipole is described by the formula:
     /// Phi(mu, r) = (mu dot r) / (|r|^2) * [s(q) - q * s'(q)] * exp(-kr)
-    fn dipole_potential(&self, dipole: &Vector3, r: &Vector3) -> f64 {
+    fn dipole_potential(&self, dipole: impl Into<Vector3>, r: impl Into<Vector3>) -> f64 {
+        let dipole: NalgebraVector3 = dipole.into().into();
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
             return 0.0;
@@ -53,7 +55,7 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
         let q = r1 / self.cutoff();
         let srf0 = self.short_range_f0(q);
         let srf1 = self.short_range_f1(q);
-        dipole.dot(r) / (r2 * r1)
+        dipole.dot(&r) / (r2 * r1)
             * if let Some(kappa) = self.kappa() {
                 (srf0 * (1.0 + kappa * r1) - q * srf1) * (-kappa * r1).exp()
             } else {
@@ -62,7 +64,9 @@ pub trait MultipolePotential: ShortRangeFunction + Cutoff {
     }
 
     /// Electrostatic potential from a point quadrupole.
-    fn quadrupole_potential(&self, quad: &Matrix3, r: &Vector3) -> f64 {
+    fn quadrupole_potential(&self, quad: impl Into<Matrix3>, r: impl Into<Vector3>) -> f64 {
+        let quad: NalgebraMatrix3 = quad.into().into();
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
             return 0.0;

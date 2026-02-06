@@ -16,7 +16,7 @@
 // limitations under the license.
 
 use super::ShortRangeFunction;
-use crate::{Cutoff, Matrix3, Vector3};
+use crate::{Cutoff, Matrix3, NalgebraMatrix3, NalgebraVector3, Vector3};
 
 /// Field due to electric multipoles.
 pub trait MultipoleField: ShortRangeFunction + Cutoff {
@@ -31,20 +31,22 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
     ///
     /// 𝐄(𝑧, 𝐫) = 𝑧𝐫 / 𝑟²・{ (1 + 𝜅𝑟)・𝑆(𝑞) - 𝑞𝑆ʹ(𝑞) }・exp{-𝜅𝑟} where 𝑞 = 𝑟 / 𝑟✂︎
     ///
-    fn ion_field(&self, charge: f64, r: &Vector3) -> Vector3 {
+    fn ion_field(&self, charge: f64, r: impl Into<Vector3>) -> Vector3 {
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Vector3::zeros();
+            return NalgebraVector3::zeros().into();
         }
         let r1 = r.norm();
         let q = r1 / self.cutoff();
         let srf0 = self.short_range_f0(q);
         let srf1 = self.short_range_f1(q);
-        charge * r / (r2 * r1)
+        let result = charge * r / (r2 * r1)
             * match self.kappa() {
                 Some(kappa) => ((1.0 + kappa * r1) * srf0 - q * srf1) * (-kappa * r1).exp(),
                 None => srf0 - q * srf1,
-            }
+            };
+        result.into()
     }
 
     /// Returns the electrostatic field scalar from a point charge.
@@ -81,10 +83,12 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
     /// E(mu, r) = (3 * (mu.dot(r) * r / r²) - mu) / r3 *
     ///             (s(q) - q * s'(q) + q² / 3 * s''(q)) +
     ///             mu / r3 * (s(q) * 𝜅r² - 2 * 𝜅r * q * s'(q) + q² / 3 * s''(q))
-    fn dipole_field(&self, dipole: &Vector3, r: &Vector3) -> Vector3 {
+    fn dipole_field(&self, dipole: impl Into<Vector3>, r: impl Into<Vector3>) -> Vector3 {
+        let dipole: NalgebraVector3 = dipole.into().into();
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Vector3::zeros();
+            return NalgebraVector3::zeros().into();
         }
         let r1 = r.norm();
         let r3_inv = (r1 * r2).recip();
@@ -92,9 +96,9 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
         let srf0 = self.short_range_f0(q);
         let srf1 = self.short_range_f1(q);
         let srf2 = self.short_range_f2(q);
-        let mut field = (3.0 * dipole.dot(r) * r / r2 - dipole) * r3_inv;
+        let mut field = (3.0 * dipole.dot(&r) * r / r2 - dipole) * r3_inv;
 
-        if let Some(kappa) = self.kappa() {
+        let result = if let Some(kappa) = self.kappa() {
             let kr = kappa * r1;
             let kr2 = kr * kr;
             field *= srf0 * (1.0 + kr + kr2 / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
@@ -105,7 +109,8 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
             field *= srf0 - q * srf1 + q * q / 3.0 * srf2;
             let field_i = dipole * r3_inv * q * q * srf2 / 3.0;
             field + field_i
-        }
+        };
+        result.into()
     }
     /// Electrostatic field from point quadrupole.
     ///
@@ -115,10 +120,12 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
     ///
     /// Returns:
     /// Field from quadrupole [UNIT: (input charge) / (input length)^2]
-    fn quadrupole_field(&self, quad: &Matrix3, r: &Vector3) -> Vector3 {
+    fn quadrupole_field(&self, quad: impl Into<Matrix3>, r: impl Into<Vector3>) -> Vector3 {
+        let quad: NalgebraMatrix3 = quad.into().into();
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Vector3::zeros();
+            return NalgebraVector3::zeros().into();
         }
         let r1 = r.norm();
         let r_hat = r / r1;
@@ -136,7 +143,7 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
         let f = (1.0 / r2 * r.transpose() * quad * r)[0]; // 1x1 matrix -> f64 by taking first and only element
         let mut field_d = 3.0 * ((5.0 * f - quad.trace()) * r_hat - quadrh - quad_trh) / r4;
 
-        if let Some(kappa) = self.kappa() {
+        let result = if let Some(kappa) = self.kappa() {
             let kr = kappa * r1;
             let kr2 = kr * kr;
             field_d *=
@@ -150,6 +157,7 @@ pub trait MultipoleField: ShortRangeFunction + Cutoff {
             field_d *= s0 - q * s1 + q2 / 3.0 * s2;
             let field_i = f * r_hat / r4 * (s2 * q2 - q2 * q * s3);
             0.5 * (field_d + field_i)
-        }
+        };
+        result.into()
     }
 }

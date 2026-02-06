@@ -16,7 +16,7 @@
 // limitations under the license.
 
 use super::MultipoleField;
-use crate::{Matrix3, Vector3};
+use crate::{Matrix3, NalgebraVector3, Vector3};
 
 /// Force between multipoles.
 pub trait MultipoleForce: MultipoleField {
@@ -38,8 +38,9 @@ pub trait MultipoleForce: MultipoleField {
     /// - `charge2`: Point charge
     /// - `r`: Distance vector between charges
     /// - `E(zA, r)`: Field from ion A at the location of ion B
-    fn ion_ion_force(&self, charge1: f64, charge2: f64, r: &Vector3) -> Vector3 {
-        charge2 * self.ion_field(charge1, r)
+    fn ion_ion_force(&self, charge1: f64, charge2: f64, r: impl Into<Vector3>) -> Vector3 {
+        let field: NalgebraVector3 = self.ion_field(charge1, r).into();
+        (charge2 * field).into()
     }
     /// Interaction force between a point charge and a point dipole.
     ///
@@ -59,8 +60,14 @@ pub trait MultipoleForce: MultipoleField {
     /// - `mu`: Dipole moment
     /// - `r`: Distance vector between dipole and charge
     /// - `E(mu, r)`: Field from the dipole at the location of the ion
-    fn ion_dipole_force(&self, charge: f64, dipole: &Vector3, r: &Vector3) -> Vector3 {
-        charge * self.dipole_field(dipole, r)
+    fn ion_dipole_force(
+        &self,
+        charge: f64,
+        dipole: impl Into<Vector3>,
+        r: impl Into<Vector3>,
+    ) -> Vector3 {
+        let field: NalgebraVector3 = self.dipole_field(dipole, r).into();
+        (charge * field).into()
     }
 
     /// Interaction force between two point dipoles.
@@ -76,10 +83,18 @@ pub trait MultipoleForce: MultipoleField {
     /// The force between two dipoles is described by the formula:
     /// F(mu1, mu2, r) = FD(mu1, mu2, r) * (s(q) - q * s'(q) + (q^2 / 3) * s''(q))
     ///                  + FI(mu1, mu2, r) * (s''(q) - q * s'''(q)) * q^2 * exp(-kr)
-    fn dipole_dipole_force(&self, mu1: &Vector3, mu2: &Vector3, r: &Vector3) -> Vector3 {
+    fn dipole_dipole_force(
+        &self,
+        mu1: impl Into<Vector3>,
+        mu2: impl Into<Vector3>,
+        r: impl Into<Vector3>,
+    ) -> Vector3 {
+        let mu1: NalgebraVector3 = mu1.into().into();
+        let mu2: NalgebraVector3 = mu2.into().into();
+        let r: NalgebraVector3 = r.into().into();
         let r2 = r.norm_squared();
         if r2 >= self.cutoff_squared() {
-            return Vector3::zeros();
+            return NalgebraVector3::zeros().into();
         }
         let r1 = r.norm();
         let rh = r / r1;
@@ -93,11 +108,11 @@ pub trait MultipoleForce: MultipoleField {
         let srf2 = self.short_range_f2(q);
         let srf3 = self.short_range_f3(q);
         let mut force_d = 3.0
-            * ((5.0 * mu1_dot_rh * mu2_dot_rh - mu1.dot(mu2)) * rh
+            * ((5.0 * mu1_dot_rh * mu2_dot_rh - mu1.dot(&mu2)) * rh
                 - mu2_dot_rh * mu1
                 - mu1_dot_rh * mu2)
             / r4;
-        if let Some(kappa) = self.kappa() {
+        let result = if let Some(kappa) = self.kappa() {
             let kr = kappa * r1;
             force_d *= srf0 * (1.0 + kr + kr * kr / 3.0) - q * srf1 * (1.0 + 2.0 / 3.0 * kr)
                 + q2 / 3.0 * srf2;
@@ -110,7 +125,8 @@ pub trait MultipoleForce: MultipoleField {
             force_d *= srf0 - q * srf1 + q * q / 3.0 * srf2;
             let force_i = mu1_dot_rh * mu2_dot_rh * rh / r4 * (srf2 * (1.0) * q2 - q2 * q * srf3);
             force_d + force_i
-        }
+        };
+        result.into()
     }
 
     /**
@@ -128,7 +144,13 @@ pub trait MultipoleForce: MultipoleField {
      * F(charge, quad, r) = charge * E(quad, r)
      * where E(quad, r) is the field from the quadrupole at the location of the ion.
      */
-    fn ion_quadrupole_force(&self, charge: f64, quad: Matrix3, r: Vector3) -> Vector3 {
-        charge * self.quadrupole_field(&quad, &r)
+    fn ion_quadrupole_force(
+        &self,
+        charge: f64,
+        quad: impl Into<Matrix3>,
+        r: impl Into<Vector3>,
+    ) -> Vector3 {
+        let field: NalgebraVector3 = self.quadrupole_field(quad, r).into();
+        (charge * field).into()
     }
 }

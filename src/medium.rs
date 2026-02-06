@@ -64,7 +64,7 @@ pub struct Medium {
 
 impl Medium {
     /// Creates a new medium
-    pub fn new(temperature: f64, permittivity: Permittivity, salt: Option<(Salt, f64)>) -> Self {
+    pub const fn new(temperature: f64, permittivity: Permittivity, salt: Option<(Salt, f64)>) -> Self {
         Self {
             permittivity,
             salt,
@@ -72,7 +72,7 @@ impl Medium {
         }
     }
     /// Medium with neat water using the `PermittivityNR::WATER` model
-    pub fn neat_water(temperature: f64) -> Self {
+    pub const fn neat_water(temperature: f64) -> Self {
         Self {
             permittivity: Permittivity::Water,
             salt: None,
@@ -80,7 +80,7 @@ impl Medium {
         }
     }
     /// Medium with salt water using the `PermittivityNR::WATER` model
-    pub fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
+    pub const fn salt_water(temperature: f64, salt: Salt, molarity: f64) -> Self {
         Self {
             permittivity: Permittivity::Water,
             salt: Some((salt, molarity)),
