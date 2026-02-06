@@ -110,6 +110,7 @@ impl RealSpaceEwald {
         Self::new(cutoff, alpha, Some(debye_length))
     }
 
+    /// Returns the damping parameter, alpha = eta / cutoff.
     pub fn alpha(&self) -> f64 {
         self.eta / self.cutoff
     }

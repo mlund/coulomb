@@ -51,6 +51,7 @@ impl From<BoundaryPermittivity> for f64 {
 /// - Update optimization <https://doi.org/10.1063/1.481216>, Eq. 24
 /// - Isotropic periodic boundary conditions, <https://doi.org/10/css8>
 pub trait ReciprocalState: Cutoff {
+    /// 3D vector type used for positions and k-vectors.
     type Vector3;
 
     /// Reciprocal space vectors, q
@@ -63,7 +64,9 @@ pub trait ReciprocalState: Cutoff {
     fn surface_permittivity(&self) -> BoundaryPermittivity;
     /// Inverse Debye screening length
     fn kappa(&self) -> Option<f64>;
+    /// Damping parameter for the Ewald splitting.
     fn alpha(&self) -> f64;
+    /// Side lengths of the simulation box.
     fn box_length(&self) -> Vec<f64>;
     /// Volume of the simulation box
     fn volume(&self) -> f64;
@@ -90,7 +93,9 @@ fn _dipole_moment(
     sum.into()
 }
 
+/// Reciprocal-space energy contribution.
 pub trait ReciprocalEnergy: ReciprocalState {
+    /// Calculate the reciprocal-space energy.
     fn reciprocal_energy() -> f64;
 
     /// Surface energy due to the dipole moment of the system, Eₛ = 2π / (2ε + 1) * μ² / V
@@ -101,6 +106,8 @@ pub trait ReciprocalEnergy: ReciprocalState {
     }
 }
 
+/// Reciprocal-space force contribution.
 pub trait ReciprocalForce: ReciprocalState {}
 
+/// Reciprocal-space electric field contribution.
 pub trait ReciprocalField: ReciprocalState {}

@@ -96,15 +96,18 @@ impl core::fmt::Display for Plain {
 }
 
 impl Plain {
+    /// Create a plain Coulomb potential without a cutoff distance.
     pub fn without_cutoff() -> Self {
         Self::new(f64::INFINITY, None)
     }
+    /// Create a new plain Coulomb scheme with a given cutoff and optional Debye length.
     pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
             kappa: debye_length.map(f64::recip),
         }
     }
+    /// Create a new plain Coulomb scheme with a given cutoff and no salt screening.
     pub fn new_without_salt(cutoff: f64) -> Self {
         Self::new(cutoff, None)
     }

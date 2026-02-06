@@ -91,6 +91,7 @@ impl Screening {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
+/// Generalized Poisson scheme for short-range electrostatic interactions.
 pub struct Poisson<const C: i32, const D: i32> {
     /// Cutoff radius
     cutoff: f64,
@@ -157,6 +158,7 @@ pub type Stenqvist = Poisson<3, 3>;
 pub type Fanourgakis = Poisson<4, 3>;
 
 impl<const C: i32, const D: i32> Poisson<C, D> {
+    /// Create a new Poisson scheme with a given cutoff and optional Debye length.
     pub fn new(cutoff: f64, debye_length: Option<f64>) -> Self {
         if C < 1 {
             panic!("`C` must be larger than zero");

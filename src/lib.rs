@@ -77,6 +77,8 @@
 //! assert_relative_eq!(energy, -2.533055636224861); // in kJ/mol
 //! ~~~
 
+#![warn(missing_docs)]
+
 #[cfg(test)]
 extern crate approx;
 
@@ -84,6 +86,7 @@ extern crate approx;
 #[macro_use]
 extern crate uom;
 #[cfg(feature = "uom")]
+/// Re-exported units from the `uom` crate.
 pub mod units;
 
 /// A point in 3D space (interoperable with other math libraries via mint)

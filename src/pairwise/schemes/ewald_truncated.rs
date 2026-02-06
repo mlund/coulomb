@@ -86,6 +86,7 @@ impl EwaldTruncated {
     /// Inverse square root of pi, 1/sqrt(pi)
     const FRAC_1_SQRT_PI: f64 = 0.5 * core::f64::consts::FRAC_2_SQRT_PI;
 
+    /// Create a new truncated Ewald scheme with given cutoff and damping parameter.
     pub fn new(cutoff: f64, alpha: f64) -> Self {
         let eta = alpha * cutoff;
         let f0 = (1.0 - erfc_x(eta) - eta * FRAC_2_SQRT_PI * (-eta * eta).exp()).recip();
