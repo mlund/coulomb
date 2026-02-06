@@ -14,7 +14,7 @@ fn main() {
         pairwise::{MultipoleEnergySI, MultipoleFieldSI, MultipolePotentialSI, Plain},
         units::*,
     };
-    use physical_constants::{AVOGADRO_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY};
+    use coulomb::{AVOGADRO_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY};
 
     let vacuum_permittivity =
         ElectricPermittivity::new::<farad_per_meter>(VACUUM_ELECTRIC_PERMITTIVITY);

@@ -1,6 +1,6 @@
 use crate::ionic_strength::IonicStrength;
 use crate::{permittivity, Temperature, ANGSTROM_PER_METER, LITER_PER_ANGSTROM3};
-use physical_constants::{
+use crate::{
     AVOGADRO_CONSTANT, BOLTZMANN_CONSTANT, ELEMENTARY_CHARGE, VACUUM_ELECTRIC_PERMITTIVITY,
 };
 use std::f64::consts::PI;

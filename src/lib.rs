@@ -119,10 +119,18 @@ pub use ionic_strength::IonicStrength;
 mod debye_length;
 pub use debye_length::{bjerrum_length, debye_length, DebyeLength};
 
-use physical_constants::{
-    AVOGADRO_CONSTANT, ELEMENTARY_CHARGE, MOLAR_GAS_CONSTANT, VACUUM_ELECTRIC_PERMITTIVITY,
-};
 use std::f64::consts::PI;
+
+/// Avogadro constant, Nₐ (mol⁻¹). CODATA 2018.
+pub const AVOGADRO_CONSTANT: f64 = 6.02214076e23;
+/// Boltzmann constant, k (J/K). CODATA 2018.
+pub const BOLTZMANN_CONSTANT: f64 = 1.380649e-23;
+/// Elementary charge, e (C). CODATA 2018.
+pub const ELEMENTARY_CHARGE: f64 = 1.602176634e-19;
+/// Molar gas constant, R (J/(mol·K)). CODATA 2018.
+pub const MOLAR_GAS_CONSTANT: f64 = 8.314462618;
+/// Vacuum electric permittivity, ε₀ (F/m). CODATA 2018.
+pub const VACUUM_ELECTRIC_PERMITTIVITY: f64 = 8.8541878128e-12;
 
 /// Electrostatic prefactor, e²/4πε₀ × 10⁷ × NA [Å × kJ / mol].
 ///
