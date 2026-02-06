@@ -101,6 +101,11 @@ pub(crate) type NalgebraMatrix3 = nalgebra::Matrix3<f64>;
 pub(crate) const ANGSTROM_PER_METER: f64 = 1e10;
 pub(crate) const LITER_PER_ANGSTROM3: f64 = 1e-27;
 
+mod error;
+pub use error::Error;
+/// A type alias for `Result<T, Error>`.
+pub type Result<T> = std::result::Result<T, Error>;
+
 mod cutoff;
 pub use cutoff::Cutoff;
 mod math;

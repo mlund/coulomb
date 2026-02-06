@@ -24,7 +24,7 @@
 
 #![allow(dead_code)]
 
-use anyhow::Result;
+use crate::Result;
 #[cfg(test)]
 use approx::assert_relative_eq;
 
@@ -94,9 +94,9 @@ impl Default for Spline {
 }
 
 impl Spline {
-    pub fn check_tolerance(&self) -> Result<(), anyhow::Error> {
+    pub fn check_tolerance(&self) -> Result<()> {
         if self.derivative_tolerance != -1.0 && self.derivative_tolerance <= 0.0 {
-            return Err(anyhow::Error::msg("ftol too small"));
+            return Err(crate::Error::Spline("ftol too small"));
         }
         Ok(())
     }
@@ -267,11 +267,11 @@ impl Andrea {
                 dx *= self.downscale_factor;
             }
             if !inner_done {
-                return Err(anyhow::Error::msg("increase tolerance"));
+                return Err(crate::Error::Spline("increase tolerance"));
             }
 
             if coeff.len() != 7 {
-                return Err(anyhow::Error::msg("invalid number of coefficients"));
+                return Err(crate::Error::Spline("invalid number of coefficients"));
             }
 
             knots.r2.push(lowx_squared);
@@ -287,7 +287,7 @@ impl Andrea {
             }
         }
         if !outer_done {
-            return Err(anyhow::Error::msg("increase tolerance"));
+            return Err(crate::Error::Spline("increase tolerance"));
         }
 
         Self::swap_coefficients(&mut knots.coeff);

@@ -14,7 +14,7 @@
 
 use crate::permittivity::RelativePermittivity;
 use crate::*;
-use anyhow::Result;
+use crate::Result;
 use core::fmt::{Display, Formatter};
 use permittivity::{ConstantPermittivity, Permittivity};
 #[cfg(feature = "serde")]
@@ -96,10 +96,10 @@ impl Medium {
     /// Change the molarity of the salt solution. Error if no salt type is defined.
     pub fn set_molarity(&mut self, molality: f64) -> Result<()> {
         if molality.is_sign_negative() || !molality.is_finite() {
-            anyhow::bail!("Molarity must be positive")
+            return Err(crate::Error::InvalidMolarity);
         }
         let Some((salt, _)) = &self.salt else {
-            anyhow::bail!("Cannot set molarity without a salt")
+            return Err(crate::Error::MissingSalt);
         };
         self.salt = Some((salt.clone(), molality));
         Ok(())
@@ -146,14 +146,12 @@ impl Temperature for Medium {
         self.temperature
     }
     /// Set temperature and ensure that it's within the range of the permittivity model
-    fn set_temperature(&mut self, temperature: f64) -> anyhow::Result<()> {
+    fn set_temperature(&mut self, temperature: f64) -> crate::Result<()> {
         if self.permittivity.temperature_is_ok(temperature) {
             self.temperature = temperature;
             Ok(())
         } else {
-            Err(anyhow::anyhow!(
-                "Temperature out of range for permittivity model"
-            ))
+            Err(crate::Error::TemperatureOutOfRange)
         }
     }
 }

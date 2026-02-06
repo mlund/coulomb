@@ -14,7 +14,7 @@
 
 //! Relative permittivity models
 
-use anyhow::Result;
+use crate::Result;
 use core::fmt;
 use core::fmt::{Display, Formatter};
 #[cfg(feature = "serde")]
@@ -36,7 +36,7 @@ pub trait RelativePermittivity {
     /// Tries to set the permittivity to a constant value
     fn set_permittivity(&mut self, permittivity: f64) -> Result<()> {
         let _ = permittivity;
-        anyhow::bail!("Cannot set permittivity for this model")
+        Err(crate::Error::Unsupported("setting the permittivity"))
     }
 }
 
@@ -235,9 +235,7 @@ impl EmpiricalPermittivity {
 impl RelativePermittivity for EmpiricalPermittivity {
     fn permittivity(&self, temperature: f64) -> Result<f64> {
         if temperature < self.temperature_interval.0 || temperature > self.temperature_interval.1 {
-            Err(anyhow::anyhow!(
-                "Temperature out of range for permittivity model"
-            ))
+            Err(crate::Error::TemperatureOutOfRange)
         } else {
             Ok(self.coeffs[0]
                 + self.coeffs[1] * temperature

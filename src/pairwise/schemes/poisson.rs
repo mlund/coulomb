@@ -201,7 +201,7 @@ impl<const C: i32, const D: i32> crate::DebyeLength for Poisson<C, D> {
     fn kappa(&self) -> Option<f64> {
         self.screening.as_ref().map(|s| s.kappa)
     }
-    fn set_debye_length(&mut self, debye_length: Option<f64>) -> anyhow::Result<()> {
+    fn set_debye_length(&mut self, debye_length: Option<f64>) -> crate::Result<()> {
         self.screening = debye_length.map(|d| Screening::new(d, self.cutoff));
         Ok(())
     }

@@ -101,13 +101,13 @@ impl Salt {
     ///
     /// # Errors
     /// Returns an error if the salt does not contain both positive and negative ions.
-    pub fn stoichiometry(&self) -> anyhow::Result<Vec<usize>> {
+    pub fn stoichiometry(&self) -> crate::Result<Vec<usize>> {
         let valencies = self.valencies();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
         let gcd = gcd(sum_positive, sum_negative);
         if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
-            anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
+            return Err(crate::Error::Stoichiometry);
         }
         Ok(valencies
             .iter()
@@ -124,7 +124,7 @@ impl Salt {
     ///
     /// # Errors
     /// Returns an error if the stoichiometry cannot be resolved.
-    pub fn ionic_strength(&self, molarity: f64) -> anyhow::Result<f64> {
+    pub fn ionic_strength(&self, molarity: f64) -> crate::Result<f64> {
         Ok(0.5
             * molarity
             * std::iter::zip(self.valencies(), self.stoichiometry()?.iter().copied())

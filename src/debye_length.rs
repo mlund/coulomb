@@ -22,8 +22,8 @@ pub trait DebyeLength {
     fn kappa(&self) -> Option<f64>;
 
     /// Tries to set the debye length to a new value.
-    fn set_debye_length(&mut self, _debye_length: Option<f64>) -> anyhow::Result<()> {
-        anyhow::bail!("Setting the Debye length is not supported");
+    fn set_debye_length(&mut self, _debye_length: Option<f64>) -> crate::Result<()> {
+        Err(crate::Error::Unsupported("setting the Debye length"))
     }
 }
 

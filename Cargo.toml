@@ -13,12 +13,12 @@ categories = ["science"]
 keywords = ["electrolytes", "electrostatics", "simulation", "multipoles", "chemistry"]
 
 [dependencies]
-anyhow = "1.0"
+thiserror = "2"
 mint = "0.5"
 nalgebra = { version = "0.34.1", default-features = false, features = ["std", "mint"] }
 num-integer = "0.1"
 num-traits = { version = "0.2", optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true, default-features = false }
+serde = { version = "1.0", features = ["derive", "std"], optional = true, default-features = false }
 uom = { version = "0.36", optional = true, features = ["si", "f64"], default-features = false }
 
 [features]
