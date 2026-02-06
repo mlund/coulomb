@@ -28,7 +28,6 @@ use anyhow::Result;
 #[cfg(test)]
 use approx::assert_relative_eq;
 
-use itertools::{Itertools, Position};
 use std::f64;
 use std::iter::zip;
 use std::vec::Vec;
@@ -236,14 +235,16 @@ impl Andrea {
 
         knots.r2.push(highx_squared);
 
-        for attempt in (0..self.max_num_ctrl_points).with_position() {
+        let mut outer_done = false;
+        for _ in 0..self.max_num_ctrl_points {
             let mut lowx = highx;
             let mut lowx_squared = 0.0;
             let mut coeff: Vec<f64> = Vec::new();
 
             let mut dx = highx - xmin;
 
-            for attempt in (0..self.max_num_downscales).with_position() {
+            let mut inner_done = false;
+            for _ in 0..self.max_num_downscales {
                 highx_squared = highx * highx;
                 lowx = highx - dx;
                 if rumin > lowx {
@@ -260,12 +261,13 @@ impl Andrea {
                 high_repulsion = error_codes.1;
                 if error_codes.0 {
                     highx = lowx;
+                    inner_done = true;
                     break;
                 }
                 dx *= self.downscale_factor;
-                if let Position::Last(_) = attempt {
-                    return Err(anyhow::Error::msg("increase tolerance"));
-                }
+            }
+            if !inner_done {
+                return Err(anyhow::Error::msg("increase tolerance"));
             }
 
             if coeff.len() != 7 {
@@ -280,11 +282,12 @@ impl Andrea {
                 knots.rmin2 = lowx * lowx;
             }
             if lowx <= rumin || high_repulsion {
+                outer_done = true;
                 break;
             }
-            if let Position::Last(_) = attempt {
-                return Err(anyhow::Error::msg("increase tolerance"));
-            }
+        }
+        if !outer_done {
+            return Err(anyhow::Error::msg("increase tolerance"));
         }
 
         Self::swap_coefficients(&mut knots.coeff);
