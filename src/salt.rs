@@ -36,8 +36,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// let salt = Salt::SodiumChloride;
 /// assert_eq!(salt.valencies(), [1, -1]);
-/// assert_eq!(salt.stoichiometry(), [1, 1]);
-/// assert_eq!(salt.ionic_strength(molarity), 0.1);
+/// assert_eq!(salt.stoichiometry().unwrap(), [1, 1]);
+/// assert_eq!(salt.ionic_strength(molarity).unwrap(), 0.1);
 /// ~~~
 ///
 /// We can also define arbitrary salts where the stoichiometry is
@@ -47,8 +47,8 @@ use serde::{Deserialize, Serialize};
 /// # use coulomb::Salt;
 /// # let molarity = 0.1;
 /// let alum = Salt::Custom(vec![1, 3, -2]); // e.g. KAl(SO₄)₂
-/// assert_eq!(alum.stoichiometry(), [1, 1, 2]);
-/// assert_eq!(alum.ionic_strength(molarity), 0.9);
+/// assert_eq!(alum.stoichiometry().unwrap(), [1, 1, 2]);
+/// assert_eq!(alum.ionic_strength(molarity).unwrap(), 0.9);
 /// ~~~
 ///
 /// The `Display` trait is implemented to pretty print the salt type:
@@ -98,15 +98,18 @@ impl Salt {
     }
 
     /// Deduce stoichiometry of the salt, νᵢ
-    pub fn stoichiometry(&self) -> Vec<usize> {
+    ///
+    /// # Errors
+    /// Returns an error if the salt does not contain both positive and negative ions.
+    pub fn stoichiometry(&self) -> anyhow::Result<Vec<usize>> {
         let valencies = self.valencies();
         let sum_positive: isize = valencies.iter().filter(|i| i.is_positive()).sum();
         let sum_negative: isize = valencies.iter().filter(|i| i.is_negative()).sum();
         let gcd = gcd(sum_positive, sum_negative);
         if sum_positive == 0 || sum_negative == 0 || gcd == 0 {
-            panic!("cannot resolve stoichiometry; did you provide both + and - ions?")
+            anyhow::bail!("cannot resolve stoichiometry; did you provide both + and - ions?")
         }
-        valencies
+        Ok(valencies
             .iter()
             .map(|valency| {
                 ((match valency.is_positive() {
@@ -114,15 +117,19 @@ impl Salt {
                     false => sum_positive,
                 }) / gcd) as usize
             })
-            .collect()
+            .collect())
     }
 
     /// Calculate ionic strength from the salt molarity (mol/l), I = ½m∑(νᵢzᵢ²)
-    pub fn ionic_strength(&self, molarity: f64) -> f64 {
-        0.5 * molarity
-            * std::iter::zip(self.valencies(), self.stoichiometry().iter().copied())
+    ///
+    /// # Errors
+    /// Returns an error if the stoichiometry cannot be resolved.
+    pub fn ionic_strength(&self, molarity: f64) -> anyhow::Result<f64> {
+        Ok(0.5
+            * molarity
+            * std::iter::zip(self.valencies(), self.stoichiometry()?.iter().copied())
                 .map(|(valency, nu)| nu * valency.pow(2) as usize)
-                .sum::<usize>() as f64
+                .sum::<usize>() as f64)
     }
 }
 
@@ -156,30 +163,35 @@ fn test_salt() {
 
     // NaCl
     assert_eq!(Salt::SodiumChloride.valencies(), [1, -1]);
-    assert_eq!(Salt::SodiumChloride.stoichiometry(), [1, 1]);
-    approx::assert_abs_diff_eq!(Salt::SodiumChloride.ionic_strength(molarity), molarity);
+    assert_eq!(Salt::SodiumChloride.stoichiometry().unwrap(), [1, 1]);
+    approx::assert_abs_diff_eq!(Salt::SodiumChloride.ionic_strength(molarity).unwrap(), molarity);
 
     // CaSO₄
     assert_eq!(Salt::CalciumSulfate.valencies(), [2, -2]);
-    assert_eq!(Salt::CalciumSulfate.stoichiometry(), [1, 1]);
+    assert_eq!(Salt::CalciumSulfate.stoichiometry().unwrap(), [1, 1]);
     approx::assert_abs_diff_eq!(
-        Salt::CalciumSulfate.ionic_strength(molarity),
+        Salt::CalciumSulfate.ionic_strength(molarity).unwrap(),
         0.5 * (molarity * 4.0 + molarity * 4.0)
     );
 
     // CaCl₂
     assert_eq!(Salt::CalciumChloride.valencies(), [2, -1]);
-    assert_eq!(Salt::CalciumChloride.stoichiometry(), [1, 2]);
+    assert_eq!(Salt::CalciumChloride.stoichiometry().unwrap(), [1, 2]);
     approx::assert_abs_diff_eq!(
-        Salt::CalciumChloride.ionic_strength(molarity),
+        Salt::CalciumChloride.ionic_strength(molarity).unwrap(),
         0.5 * (molarity * 4.0 + 2.0 * molarity)
     );
 
     // KAl(SO₄)₂
     assert_eq!(Salt::PotassiumAlum.valencies(), [1, 3, -2]);
-    assert_eq!(Salt::PotassiumAlum.stoichiometry(), [1, 1, 2]);
+    assert_eq!(Salt::PotassiumAlum.stoichiometry().unwrap(), [1, 1, 2]);
     approx::assert_abs_diff_eq!(
-        Salt::PotassiumAlum.ionic_strength(molarity),
+        Salt::PotassiumAlum.ionic_strength(molarity).unwrap(),
         0.5 * (molarity * 1.0 + molarity * 9.0 + 2.0 * molarity * 4.0)
     );
+
+    // Test invalid salt returns error
+    let invalid_salt = Salt::Custom(vec![1, 1]); // All positive
+    assert!(invalid_salt.stoichiometry().is_err());
+    assert!(invalid_salt.ionic_strength(0.1).is_err());
 }

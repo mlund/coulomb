@@ -95,6 +95,11 @@ pub trait ShortRangeFunction: DebyeLength {
     /// The default implementation uses a numerical central difference using
     /// `short_range_f0`. For better performance, this should be
     /// overridden with an analytical expression.
+    ///
+    /// # Numerical Edge Cases
+    /// At boundaries (`q ≤ 1e-6` or `q ≥ 1.0 - 1e-6`), forward/backward differences
+    /// are used instead of central differences, which may introduce small discontinuities.
+    /// For high-precision applications, override this method with an analytical expression.
     fn short_range_f1(&self, q: f64) -> f64 {
         const EPS: f64 = 1e-6;
         if q <= EPS {
@@ -113,6 +118,11 @@ pub trait ShortRangeFunction: DebyeLength {
     /// The default implementation uses a numerical central difference of
     /// `short_range_f1`. For better performance, this should be
     /// overridden with an analytical expression.
+    ///
+    /// # Numerical Edge Cases
+    /// Values near boundaries (`q ≈ 1e-6` or `q ≈ 1.0`) may have reduced accuracy due to
+    /// cascading numerical differentiation. Override with an analytical expression for
+    /// high-precision applications.
     fn short_range_f2(&self, q: f64) -> f64 {
         const EPS: f64 = 1e-6;
         (self.short_range_f1(q + EPS) - self.short_range_f1(q - EPS)) / (2.0 * EPS)
@@ -123,6 +133,11 @@ pub trait ShortRangeFunction: DebyeLength {
     /// The default implementation uses a numerical central difference of
     /// `short_range_f2`. For better performance, this should be
     /// overridden with an analytical expression.
+    ///
+    /// # Numerical Edge Cases
+    /// Values near boundaries (`q ≈ 1e-6` or `q ≈ 1.0`) may have reduced accuracy due to
+    /// cascading numerical differentiation. Override with an analytical expression for
+    /// high-precision applications.
     fn short_range_f3(&self, q: f64) -> f64 {
         const EPS: f64 = 1e-6;
         (self.short_range_f2(q + EPS) - self.short_range_f2(q - EPS)) / (2.0 * EPS)

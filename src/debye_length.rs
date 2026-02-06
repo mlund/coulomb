@@ -34,7 +34,7 @@ where
 {
     fn debye_length(&self) -> Option<f64> {
         let temperature = self.temperature();
-        let permittivity = self.permittivity(temperature).unwrap();
+        let permittivity = self.permittivity(temperature).ok()?;
         self.ionic_strength()
             .map(|i| debye_length(temperature, permittivity, i))
     }
