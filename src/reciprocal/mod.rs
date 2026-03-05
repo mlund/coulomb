@@ -19,12 +19,75 @@
 //!
 //! This module provides [`EwaldReciprocal`], which handles k-space energies,
 //! forces, and efficient Monte Carlo partial updates for both unscreened
-//! Coulomb (κ=0) and screened Yukawa (κ>0) interactions.
+//! Coulomb ($\kappa=0$) and screened Yukawa ($\kappa>0$) interactions.
 //!
-//! The API uses SoA (Structure-of-Arrays) layout: separate `&[f64]` slices
-//! for x, y, z coordinates and charges. Internally, k-vectors and coefficients
-//! are stored as f32 (halving memory and enabling 8-wide SIMD), while structure
-//! factor accumulators use f64 for numerical safety.
+//! # Theory
+//!
+//! The Ewald method splits the pair potential into real-space and reciprocal-space
+//! contributions. For a system of $N$ charges $q_i$ in an orthorhombic box with
+//! side lengths $L_x, L_y, L_z$ and volume $V = L_x L_y L_z$, the total
+//! electrostatic energy is:
+//!
+//! $$U = U_\text{real} + U_\text{recip} + U_\text{self} + U_\text{surface}$$
+//!
+//! This module handles $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$.
+//!
+//! ## Reciprocal-space energy
+//!
+//! $$U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k} \neq 0} A(\mathbf{k}) \, |S(\mathbf{k})|^2$$
+//!
+//! where the structure factor is $S(\mathbf{k}) = \sum_j q_j e^{i\mathbf{k} \cdot \mathbf{r}_j}$
+//! and the k-space coefficient is:
+//!
+//! $$A(\mathbf{k}) = \frac{\exp\!\bigl(-(k^2 + \kappa^2) / 4\alpha^2\bigr)}{k^2 + \kappa^2}$$
+//!
+//! For Coulomb ($\kappa = 0$), this reduces to $A(\mathbf{k}) = \exp(-k^2/4\alpha^2)/k^2$.
+//!
+//! ## Self-energy correction
+//!
+//! The Ewald real-space sum inadvertently includes the interaction of each charge
+//! with its own Gaussian image. This must be subtracted:
+//!
+//! $$U_\text{self} = -\frac{\alpha}{\sqrt\pi} e^{-\kappa^2/4\alpha^2} \sum_i q_i^2
+//!   + \frac{\kappa}{2} \operatorname{erfc}\!\left(\frac{\kappa}{2\alpha}\right) \sum_i q_i^2$$
+//!
+//! For Coulomb, only the first term survives: $U_\text{self} = -(\alpha/\sqrt\pi) \sum_i q_i^2$.
+//!
+//! ## Surface term
+//!
+//! For non-tinfoil (finite $\varepsilon_s$) boundary conditions:
+//!
+//! $$U_\text{surface} = \frac{2\pi}{(2\varepsilon_s + 1) V} \left|\sum_i q_i \mathbf{r}_i\right|^2$$
+//!
+//! This term vanishes for metallic (tinfoil, $\varepsilon_s = \infty$) boundaries.
+//!
+//! ## IPBC (Isotropic Periodic Boundary Conditions)
+//!
+//! IPBC ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) decomposes
+//! $\cos(\mathbf{k} \cdot \mathbf{r}_{ij})$ into products of per-axis
+//! $\cos/\sin$ terms. This requires only first-octant k-vectors ($n_x, n_y, n_z \geq 0$)
+//! and stores 8 structure-factor components $Q_{\alpha\beta\gamma}$ per k-vector,
+//! with appropriate octant symmetry factors baked into $A(\mathbf{k})$.
+//!
+//! # Parameter optimization
+//!
+//! Automatic parameter selection uses Kolafa–Perram error estimates:
+//!
+//! - **Real-space cutoff**: $r_c = L_\text{min} / 2$ (minimum image convention limit)
+//! - **Splitting parameter**: $\alpha = \sqrt{-\ln \varepsilon} / r_c$, balancing
+//!   real-space error $\sim \exp(-\alpha^2 r_c^2)$
+//! - **Reciprocal cutoff**: $n_\text{max} = \lceil \alpha L_\text{max} \sqrt{-\ln \varepsilon} / \pi \rceil$
+//!
+//! For Yukawa ($\kappa > 0$), [Salin & Caillol (2000)](https://doi.org/10.1063/1.1326477)
+//! showed that the optimal splitting parameter is independent of $\kappa$ (Eq. 3.3),
+//! so the same $\alpha$ and $n_\text{max}$ work for both Coulomb and Yukawa.
+//!
+//! # Mixed precision
+//!
+//! K-vectors and $A(\mathbf{k})$ coefficients are stored as `f32`, halving memory
+//! bandwidth and enabling wider SIMD. Trigonometric evaluations use `f32` arithmetic,
+//! while structure factor accumulators and energy sums use `f64` for numerical safety.
+//! On x86_64 with the `simd` feature, a polynomial `sin_cos` avoids per-lane libm calls.
 //!
 //! # MC workflow
 //! ```
@@ -64,22 +127,21 @@ pub enum EwaldPolicy {
     /// Standard periodic boundary conditions (default).
     #[default]
     PBC,
-    /// Isotropic periodic boundary conditions (https://doi.org/10/css8).
+    /// Isotropic periodic boundary conditions ([Stenqvist & Lund, 2018](https://doi.org/10/css8)).
     IPBC,
 }
 
 /// Reciprocal-space Ewald summation for Coulomb and Yukawa potentials.
 ///
-/// Handles k-space energies, forces, and efficient MC partial updates.
-/// For Coulomb, set κ=0. For Yukawa, set κ = 1/λ_D.
+/// Computes $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$
+/// for both unscreened Coulomb ($\kappa = 0$) and screened Yukawa ($\kappa = 1/\lambda_D$).
 ///
-/// Uses SoA (Structure-of-Arrays) layout throughout: positions are passed as
-/// separate `x`, `y`, `z` slices, and forces are accumulated into caller-provided
-/// buffers. This avoids allocation, matches common particle storage layouts, and
-/// prepares for SIMD/GPU backends.
+/// Positions are passed as separate `x`, `y`, `z` slices (SoA layout), and forces
+/// are accumulated into caller-provided buffers. The input type is generic over
+/// `T: Into<f64> + Copy`, accepting both `f32` and `f64` slices at zero cost.
 ///
 /// Supports both standard PBC (half-shell k-vectors) and IPBC (first-octant
-/// k-vectors, https://doi.org/10/css8) via [`EwaldPolicy`].
+/// k-vectors, [Stenqvist & Lund, 2018](https://doi.org/10/css8)) via [`EwaldPolicy`].
 pub struct EwaldReciprocal {
     kvecs: KVectors,
     /// Stored for `with_policy()` rebuild and `surface_energy()`.
@@ -109,10 +171,16 @@ impl EwaldReciprocal {
     ///
     /// Returns `(ewald, real_cutoff)` where `real_cutoff` is the recommended
     /// real-space pair cutoff (Å) to pair with this reciprocal-space instance.
+    /// Parameters are chosen via Kolafa–Perram estimates:
+    /// $r_c = L_\text{min}/2$,
+    /// $\alpha = \sqrt{-\ln\varepsilon}/r_c$,
+    /// $n_\text{max} = \lceil \alpha L_\text{max} \sqrt{-\ln\varepsilon}/\pi \rceil$.
     ///
     /// - `box_length`: Side lengths `[Lx, Ly, Lz]` of the orthorhombic simulation box (Å)
-    /// - `accuracy`: Target relative energy accuracy (e.g. `1e-5`)
-    /// - `kappa`: Inverse Debye screening length (`None` or `Some(0.0)` for Coulomb, `Some(κ)` for Yukawa)
+    /// - `accuracy`: Target relative energy accuracy $\varepsilon$ (e.g. `1e-5`)
+    /// - `kappa`: Inverse Debye screening length (`None` or `Some(0.0)` for Coulomb, `Some(κ)` for Yukawa).
+    ///   The optimal $\alpha$ is independent of $\kappa$
+    ///   ([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477)).
     ///
     /// Uses tinfoil (metallic) boundary conditions and standard PBC by default.
     /// Customize with [`Self::with_policy`] and [`Self::set_boundary`].
@@ -139,13 +207,15 @@ impl EwaldReciprocal {
 
     /// Construct with explicit Ewald parameters.
     ///
-    /// Use this when you know the exact `alpha` and `n_max` values you want
+    /// Use this when you know the exact $\alpha$ and $n_\text{max}$ values you want
     /// (e.g. for reproducing literature results or benchmarking).
     ///
-    /// - `box_length`: Side lengths `[Lx, Ly, Lz]` of the orthorhombic simulation box (Å)
-    /// - `alpha`: Ewald splitting parameter (Å⁻¹)
-    /// - `kappa`: Inverse Debye screening length (0 for Coulomb, >0 for Yukawa)
-    /// - `n_max`: Spherical cutoff in integer k-space. The number of k-vectors grows as ~n_max³.
+    /// - `box_length`: Side lengths $[L_x, L_y, L_z]$ of the orthorhombic simulation box (Å)
+    /// - `alpha`: Ewald splitting parameter $\alpha$ (Å⁻¹)
+    /// - `kappa`: Inverse Debye screening length $\kappa$ (0 for Coulomb, >0 for Yukawa)
+    /// - `n_max`: Spherical cutoff in integer k-space $n_\text{max}$;
+    ///   k-vectors satisfy $n_x^2 + n_y^2 + n_z^2 \leq n_\text{max}^2$
+    ///   and map to $\mathbf{k} = 2\pi(n_x/L_x, n_y/L_y, n_z/L_z)$.
     ///
     /// # Example
     /// ```
@@ -170,7 +240,7 @@ impl EwaldReciprocal {
     /// Set the boundary permittivity.
     ///
     /// Only affects [`Self::surface_energy`] and [`Self::add_surface_forces`].
-    /// Default is tinfoil (ε = ∞), which makes the surface term vanish.
+    /// Default is tinfoil ($\varepsilon_s = \infty$), which makes the surface term vanish.
     pub fn set_boundary(&mut self, boundary: ConstantPermittivity) {
         self.boundary = boundary;
     }
@@ -206,8 +276,14 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Recompute all structure factors from scratch. O(N × N_k).
-    pub fn update_all(&mut self, x: &[f64], y: &[f64], z: &[f64], charges: &[f64]) {
+    /// Recompute all structure factors from scratch. $O(N \times N_k)$.
+    pub fn update_all<T: Into<f64> + Copy>(
+        &mut self,
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
+    ) {
         match self.policy {
             EwaldPolicy::PBC => {
                 self.sk_re.fill(0.0);
@@ -217,10 +293,10 @@ impl EwaldReciprocal {
                 {
                     update_all_pbc(
                         &self.kvecs,
-                        px,
-                        py,
-                        pz,
-                        charge,
+                        px.into(),
+                        py.into(),
+                        pz.into(),
+                        charge.into(),
                         &mut self.sk_re,
                         &mut self.sk_im,
                     );
@@ -233,10 +309,10 @@ impl EwaldReciprocal {
                 {
                     backend::scalar::update_all_ipbc(
                         &self.kvecs,
-                        px,
-                        py,
-                        pz,
-                        charge,
+                        px.into(),
+                        py.into(),
+                        pz.into(),
+                        charge.into(),
                         &mut self.sk_ipbc,
                     );
                 }
@@ -244,8 +320,16 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Commit a single-particle move. O(N_k).
-    pub fn update_particle(&mut self, charge: f64, old: [f64; 3], new: [f64; 3]) {
+    /// Commit a single-particle move. $O(N_k)$.
+    pub fn update_particle<T: Into<f64> + Copy>(
+        &mut self,
+        charge: T,
+        old: [T; 3],
+        new: [T; 3],
+    ) {
+        let charge = charge.into();
+        let old = [old[0].into(), old[1].into(), old[2].into()];
+        let new = [new[0].into(), new[1].into(), new[2].into()];
         match self.policy {
             EwaldPolicy::PBC => {
                 update_particle_pbc(
@@ -269,9 +353,9 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Reciprocal-space energy. O(N_k).
+    /// Reciprocal-space energy. $O(N_k)$.
     ///
-    /// U_k = (2π/V) Σ_k A(k) |S(k)|²
+    /// $$U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \, |S(\mathbf{k})|^2$$
     pub fn energy(&self) -> f64 {
         let prefactor = 2.0 * PI / self.volume;
         let sum: f64 = match self.policy {
@@ -281,13 +365,21 @@ impl EwaldReciprocal {
         prefactor * sum
     }
 
-    /// Energy change for a trial particle move, without mutating state. O(N_k).
+    /// Energy change for a trial particle move, without mutating state. $O(N_k)$.
     ///
-    /// Uses the identity |S+ΔS|² - |S|² = 2S·ΔS + |ΔS|² to avoid a full
-    /// recomputation of structure factors, making MC trial moves O(N_k) not O(N·N_k).
+    /// Uses $|S+\Delta S|^2 - |S|^2 = 2S \cdot \Delta S + |\Delta S|^2$ to avoid
+    /// a full recomputation of structure factors, making MC trial moves $O(N_k)$ not $O(N \cdot N_k)$.
     ///
-    /// ΔU = (2π/V) Σ_k A(k) [2 S(k)·ΔS(k) + ΔS(k)²]
-    pub fn energy_change(&self, charge: f64, old: [f64; 3], new: [f64; 3]) -> f64 {
+    /// $$\Delta U = \frac{2\pi}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \bigl[2\,S(\mathbf{k}) \cdot \Delta S(\mathbf{k}) + |\Delta S(\mathbf{k})|^2\bigr]$$
+    pub fn energy_change<T: Into<f64> + Copy>(
+        &self,
+        charge: T,
+        old: [T; 3],
+        new: [T; 3],
+    ) -> f64 {
+        let charge = charge.into();
+        let old = [old[0].into(), old[1].into(), old[2].into()];
+        let new = [new[0].into(), new[1].into(), new[2].into()];
         let prefactor = 2.0 * PI / self.volume;
         let sum = match self.policy {
             EwaldPolicy::PBC => {
@@ -300,11 +392,12 @@ impl EwaldReciprocal {
         prefactor * sum
     }
 
-    /// Force on one particle. O(N_k). Returns `[fx, fy, fz]`.
+    /// Force on one particle. $O(N_k)$. Returns `[fx, fy, fz]`.
     ///
-    /// PBC: F_i = (4πq_i/V) Σ_k A(k) (sin(k·r)·S_re - cos(k·r)·S_im) · k
-    /// IPBC: F_ix = -(4πq_i/V) Σ_k A(k) × Σ_{αβγ} Q_αβγ × dQ_αβγ/dx_i
-    pub fn force(&self, pos: [f64; 3], charge: f64) -> [f64; 3] {
+    /// PBC: $\mathbf{F}_i = \frac{4\pi q_i}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \bigl[\sin(\mathbf{k} \cdot \mathbf{r}_i) S_\text{re} - \cos(\mathbf{k} \cdot \mathbf{r}_i) S_\text{im}\bigr] \mathbf{k}$
+    pub fn force<T: Into<f64> + Copy>(&self, pos: [T; 3], charge: T) -> [f64; 3] {
+        let charge = charge.into();
+        let pos = [pos[0].into(), pos[1].into(), pos[2].into()];
         let prefactor = 4.0 * PI * charge / self.volume;
         let [fx, fy, fz] = match self.policy {
             EwaldPolicy::PBC => force_pbc(&self.kvecs, pos, &self.sk_re, &self.sk_im),
@@ -313,17 +406,17 @@ impl EwaldReciprocal {
         [prefactor * fx, prefactor * fy, prefactor * fz]
     }
 
-    /// Accumulate reciprocal-space forces on all particles. O(N × N_k).
+    /// Accumulate reciprocal-space forces on all particles. $O(N \times N_k)$.
     ///
     /// Adds (+=) force contributions into the provided `fx`, `fy`, `fz` buffers.
     /// Caller is responsible for zeroing the buffers if starting fresh.
     #[allow(clippy::too_many_arguments)]
-    pub fn add_forces(
+    pub fn add_forces<T: Into<f64> + Copy>(
         &self,
-        x: &[f64],
-        y: &[f64],
-        z: &[f64],
-        charges: &[f64],
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
         fx: &mut [f64],
         fy: &mut [f64],
         fz: &mut [f64],
@@ -341,12 +434,14 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Self-energy correction (position-independent). O(N).
+    /// Self-energy correction (position-independent). $O(N)$.
     ///
-    /// For Coulomb (κ=0): U_self = -(α/√π) Σ q²
-    /// For Yukawa (κ>0): U_self = -(α/√π) exp(-κ²/(4α²)) Σ q² + (κ/2) erfc(κ/(2α)) Σ q²
-    pub fn self_energy(&self, charges: &[f64]) -> f64 {
-        let sum_q2: f64 = charges.iter().map(|q| q * q).sum();
+    /// $$U_\text{self} = \left[-\frac{\alpha}{\sqrt\pi} e^{-\kappa^2/4\alpha^2}
+    ///   + \frac{\kappa}{2} \operatorname{erfc}\!\left(\frac{\kappa}{2\alpha}\right)\right] \sum_i q_i^2$$
+    ///
+    /// For Coulomb ($\kappa = 0$): $U_\text{self} = -(\alpha/\sqrt\pi) \sum_i q_i^2$.
+    pub fn self_energy<T: Into<f64> + Copy>(&self, charges: &[T]) -> f64 {
+        let sum_q2: f64 = charges.iter().map(|&q| { let q: f64 = q.into(); q * q }).sum();
         let alpha = self.alpha;
         let sqrt_pi = PI.sqrt();
 
@@ -362,12 +457,18 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Surface energy for non-tinfoil boundaries. O(N).
+    /// Surface energy for non-tinfoil boundaries. $O(N)$.
     ///
-    /// U_surface = 2π / ((2ε_s + 1) V) |Σ q_i r_i|²
+    /// $$U_\text{surface} = \frac{2\pi}{(2\varepsilon_s + 1)\,V} \left|\sum_i q_i \mathbf{r}_i\right|^2$$
     ///
-    /// Returns 0 for tinfoil boundary conditions.
-    pub fn surface_energy(&self, x: &[f64], y: &[f64], z: &[f64], charges: &[f64]) -> f64 {
+    /// Returns 0 for tinfoil ($\varepsilon_s = \infty$) boundary conditions.
+    pub fn surface_energy<T: Into<f64> + Copy>(
+        &self,
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
+    ) -> f64 {
         // Tinfoil (ε_s = ∞) makes the surface term vanish; finite ε_s corrects
         // for the depolarization field at the boundary of the Ewald sphere.
         let eps_s: f64 = self.boundary.into();
@@ -378,17 +479,17 @@ impl EwaldReciprocal {
         2.0 * PI / ((2.0 * eps_s + 1.0) * self.volume) * (dx * dx + dy * dy + dz * dz)
     }
 
-    /// Accumulate surface forces on all particles. O(N).
+    /// Accumulate surface forces on all particles. $O(N)$.
     ///
     /// Adds (+=) force contributions into the provided `fx`, `fy`, `fz` buffers.
     /// Does nothing for tinfoil boundary conditions.
     #[allow(clippy::too_many_arguments)]
-    pub fn add_surface_forces(
+    pub fn add_surface_forces<T: Into<f64> + Copy>(
         &self,
-        x: &[f64],
-        y: &[f64],
-        z: &[f64],
-        charges: &[f64],
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
         fx: &mut [f64],
         fy: &mut [f64],
         fz: &mut [f64],
@@ -404,7 +505,7 @@ impl EwaldReciprocal {
             .zip(fx.iter_mut())
             .zip(fy.iter_mut().zip(fz.iter_mut()))
         {
-            let c = base * q;
+            let c: f64 = base * q.into();
             *out_fx += c * dx;
             *out_fy += c * dy;
             *out_fz += c * dz;
@@ -416,7 +517,7 @@ impl EwaldReciprocal {
         self.kvecs.len()
     }
 
-    /// The splitting parameter α (for diagnostics/pairing with RealSpaceEwald).
+    /// The splitting parameter $\alpha$ (for diagnostics/pairing with real-space Ewald).
     pub fn alpha(&self) -> f64 {
         self.alpha
     }
@@ -519,12 +620,13 @@ fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [
 }
 
 /// Calculate the dipole moment: Σ q_i r_i, returned as [dx, dy, dz].
-fn dipole_moment(x: &[f64], y: &[f64], z: &[f64], charges: &[f64]) -> [f64; 3] {
+fn dipole_moment<T: Into<f64> + Copy>(x: &[T], y: &[T], z: &[T], charges: &[T]) -> [f64; 3] {
     charges
         .iter()
         .zip(x.iter())
         .zip(y.iter().zip(z.iter()))
         .fold([0.0; 3], |[dx, dy, dz], ((&q, &px), (&py, &pz))| {
+            let (q, px, py, pz) = (q.into(), px.into(), py.into(), pz.into());
             [dx + q * px, dy + q * py, dz + q * pz]
         })
 }
@@ -1012,6 +1114,27 @@ mod tests {
         ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges);
         let e_minus = ewald.energy();
         assert_relative_eq!(fz, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
+    }
+
+    #[test]
+    fn test_f32_input() {
+        let mut ewald = EwaldReciprocal::with_parameters([10.0; 3], 0.8, 0.0, 5);
+        let x: [f32; 2] = [-0.5, 0.5];
+        let y: [f32; 2] = [0.0, 0.0];
+        let z: [f32; 2] = [0.0, 0.0];
+        let charges: [f32; 2] = [1.0, -1.0];
+        ewald.update_all(&x, &y, &z, &charges);
+        let e = ewald.energy();
+        assert!(e.abs() > 0.0);
+
+        let de = ewald.energy_change(1.0_f32, [-0.5_f32, 0.0, 0.0], [-0.3_f32, 0.0, 0.0]);
+        assert!(de.abs() > 0.0);
+
+        let [fx, _, _] = ewald.force([-0.5_f32, 0.0, 0.0], 1.0_f32);
+        assert!(fx.abs() > 0.0);
+
+        let self_e = ewald.self_energy(&charges);
+        assert!(self_e < 0.0);
     }
 
     #[test]
