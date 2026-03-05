@@ -28,8 +28,13 @@ serde = ["dep:serde"]
 
 [dev-dependencies]
 approx = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
 image = "0.25"
 colorgrad = "0.6"
+
+[[bench]]
+name = "reciprocal"
+harness = false
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation:
