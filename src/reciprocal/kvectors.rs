@@ -11,6 +11,7 @@ use super::EwaldPolicy;
 ///
 /// For PBC: half-shell k-vectors (one of each ±k pair), A(k) doubled.
 /// For IPBC: first-octant k-vectors (nx,ny,nz ≥ 0), A(k) includes octant symmetry factor.
+#[derive(Clone)]
 pub(super) struct KVectors {
     pub(super) kx: Vec<f32>,
     pub(super) ky: Vec<f32>,

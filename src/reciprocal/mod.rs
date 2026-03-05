@@ -123,6 +123,7 @@ use crate::permittivity::ConstantPermittivity;
 
 /// Policy for reciprocal-space Ewald summation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EwaldPolicy {
     /// Standard periodic boundary conditions (default).
     #[default]
@@ -142,6 +143,7 @@ pub enum EwaldPolicy {
 ///
 /// Supports both standard PBC (half-shell k-vectors) and IPBC (first-octant
 /// k-vectors, [Stenqvist & Lund, 2018](https://doi.org/10/css8)) via [`EwaldPolicy`].
+#[derive(Clone)]
 pub struct EwaldReciprocal {
     kvecs: KVectors,
     /// Stored for `with_policy()` rebuild.
