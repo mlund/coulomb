@@ -95,8 +95,8 @@ SIMD acceleration.
 ~~~ rust
 use coulomb::reciprocal::*;
 
-// Automatic parameter selection for target accuracy 1e-5
-let (mut ewald, r_cutoff) = EwaldReciprocal::new([10.0; 3], 1e-5, None);
+// Automatic parameter selection for cutoff 5 Å and target accuracy 1e-5
+let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
 
 let (x, y, z) = (vec![-0.5, 0.5], vec![0.0, 0.0], vec![0.0, 0.0]);
 let charges = vec![1.0, -1.0];

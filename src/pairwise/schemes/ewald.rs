@@ -29,22 +29,30 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Further information, see original article by _P.P. Ewald_, <https://doi.org/fcjts8>.
 ///
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct RealSpaceEwald {
     /// Real space cutoff distance, 𝑟✂︎
     cutoff: f64,
-    /// Alpha
-    #[cfg_attr(feature = "serde", serde(alias = "α"))]
-    alpha: f64,
     /// Debye length
-    #[cfg_attr(feature = "serde", serde(alias = "debyelength"))]
     debye_length: Option<f64>,
     /// Reduced alpha, 𝜂 = 𝛼 × 𝑟✂︎ (dimensionless)
-    #[cfg_attr(feature = "serde", serde(skip))]
     eta: f64,
     /// Reduced inverse screening length, 𝜻 = 𝜿 × 𝑟✂︎ (dimensionless)
-    #[cfg_attr(feature = "serde", serde(skip))]
     zeta: Option<f64>,
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for RealSpaceEwald {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("RealSpaceEwald", 3)?;
+        s.serialize_field("cutoff", &self.cutoff)?;
+        s.serialize_field("alpha", &self.alpha())?;
+        s.serialize_field("debye_length", &self.debye_length)?;
+        s.end()
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -57,16 +65,16 @@ impl<'de> Deserialize<'de> for RealSpaceEwald {
         #[serde(deny_unknown_fields)]
         struct RealSpaceEwaldData {
             cutoff: f64,
-            alpha: f64,
+            accuracy: f64,
             debye_length: Option<f64>,
         }
 
         let RealSpaceEwaldData {
             cutoff,
-            alpha,
+            accuracy,
             debye_length,
         } = RealSpaceEwaldData::deserialize(deserializer)?;
-        Ok(RealSpaceEwald::new(cutoff, alpha, debye_length))
+        Ok(RealSpaceEwald::new(cutoff, accuracy, debye_length))
     }
 }
 
@@ -88,29 +96,32 @@ impl core::fmt::Display for RealSpaceEwald {
 impl RealSpaceEwald {
     /// Square root of pi
     const SQRT_PI: f64 = 1.7724538509055159;
-    /// Construct a new Ewald scheme with given cutoff, alpha, (and debye length).
+
+    /// Construct a new real-space Ewald scheme from cutoff and target accuracy.
     ///
-    /// The Debye length and cutoff should have the same unit of length.
-    pub fn new(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
+    /// Derives the splitting parameter α via the Kolafa–Perram estimate
+    /// α = √(−ln ε) / r_c (see [`ewald_alpha`](crate::reciprocal::ewald_alpha)).
+    ///
+    /// # Arguments
+    /// - `cutoff`: Real-space cutoff distance, r_c
+    /// - `accuracy`: Target relative energy accuracy ε (e.g. `1e-5`), must be in (0, 1)
+    /// - `debye_length`: Optional Debye screening length (same unit as cutoff)
+    pub fn new(cutoff: f64, accuracy: f64, debye_length: Option<f64>) -> Self {
+        let alpha = crate::reciprocal::ewald_alpha(cutoff, accuracy);
+        Self::from_alpha(cutoff, alpha, debye_length)
+    }
+
+    /// Internal constructor from explicit alpha (used by serde and `real_space_scheme`).
+    pub(crate) fn from_alpha(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
-            alpha,
             debye_length,
             eta: alpha * cutoff,
             zeta: debye_length.map(|d| cutoff / d),
         }
     }
-    /// Construct a salt-free Ewald scheme with given cutoff and alpha.
-    pub fn new_without_salt(cutoff: f64, alpha: f64) -> Self {
-        Self::new(cutoff, alpha, None)
-    }
 
-    /// Construct a new Ewald scheme with given cutoff and alpha with salt screening.
-    pub fn new_with_salt(cutoff: f64, alpha: f64, debye_length: f64) -> Self {
-        Self::new(cutoff, alpha, Some(debye_length))
-    }
-
-    /// Returns the damping parameter, alpha = eta / cutoff.
+    /// Returns the damping parameter α.
     pub fn alpha(&self) -> f64 {
         self.eta / self.cutoff
     }
@@ -221,7 +232,7 @@ fn test_ewald() {
     // Test short-ranged function without salt
     let cutoff = 29.0;
     let alpha = 0.1;
-    let pot = RealSpaceEwald::new_without_salt(cutoff, alpha);
+    let pot = RealSpaceEwald::from_alpha(cutoff, alpha, None);
     let eps = 1e-8;
 
     assert_relative_eq!(
@@ -243,7 +254,7 @@ fn test_ewald() {
 
     // Test short-ranged function with a Debye screening length
     let debye_length = 23.0;
-    let pot = RealSpaceEwald::new_with_salt(cutoff, alpha, debye_length);
+    let pot = RealSpaceEwald::from_alpha(cutoff, alpha, Some(debye_length));
     let eps = 1e-7;
 
     assert_relative_eq!(
