@@ -63,11 +63,10 @@
 //!
 //! ## IPBC (Isotropic Periodic Boundary Conditions)
 //!
-//! IPBC ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) decomposes
-//! $\cos(\mathbf{k} \cdot \mathbf{r}_{ij})$ into products of per-axis
-//! $\cos/\sin$ terms. This requires only first-octant k-vectors ($n_x, n_y, n_z \geq 0$)
-//! and stores 8 structure-factor components $Q_{\alpha\beta\gamma}$ per k-vector,
-//! with appropriate octant symmetry factors baked into $A(\mathbf{k})$.
+//! IPBC ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) uses a cos-product
+//! structure factor $Q(\mathbf{k}) = \sum_j q_j \prod_\alpha \cos(k_\alpha r_{j\alpha})$
+//! (one real scalar per k-vector). Only first-octant k-vectors ($n_x, n_y, n_z \geq 0$)
+//! are needed, with octant symmetry factors $2^d$ baked into $A(\mathbf{k})$.
 //!
 //! # Parameter optimization
 //!
@@ -144,9 +143,12 @@ pub enum EwaldPolicy {
 /// k-vectors, [Stenqvist & Lund, 2018](https://doi.org/10/css8)) via [`EwaldPolicy`].
 pub struct EwaldReciprocal {
     kvecs: KVectors,
-    /// Stored for `with_policy()` rebuild and `surface_energy()`.
+    /// Stored for `with_policy()` rebuild.
     box_length: [f64; 3],
-    volume: f64,
+    /// Precomputed `2π/V` for energy/energy_change.
+    two_pi_over_v: f64,
+    /// Precomputed `4π/V` for force.
+    four_pi_over_v: f64,
     /// Retained for `self_energy()` which needs the raw splitting parameter.
     alpha: f64,
     /// Retained for `self_energy()` which needs the raw screening parameter.
@@ -159,11 +161,10 @@ pub struct EwaldReciprocal {
     /// Empty when policy is IPBC (empty Vec costs nothing — just a dangling pointer).
     sk_re: Vec<f64>,
     sk_im: Vec<f64>,
-    /// IPBC structure factors: all 8 cos/sin combinations per k-vector [CCC..SSS].
-    /// All 8 are needed because cos(k·r_ij) expands into a sum over products of
-    /// per-axis cos/sin terms, and only the full set factorizes into Σ Q²_αβγ form
-    /// suitable for O(N·N_k) evaluation. Empty when policy is PBC.
-    sk_ipbc: Vec<[f64; 8]>,
+    /// IPBC structure factors: $Q_k = \sum_j q_j \prod_\alpha \cos(k_\alpha r_{j\alpha})$.
+    /// One real scalar per k-vector (eq. 2 in [Stenqvist & Lund, 2018](https://doi.org/10/css8)).
+    /// Empty when policy is PBC.
+    sk_ipbc: Vec<f64>,
 }
 
 impl EwaldReciprocal {
@@ -255,16 +256,19 @@ impl EwaldReciprocal {
     ) -> Self {
         // Parameter validation is handled by KVectors::new() via debug_assert.
         let volume = box_length[0] * box_length[1] * box_length[2];
+        let two_pi_over_v = 2.0 * PI / volume;
+        let four_pi_over_v = 4.0 * PI / volume;
         let kvecs = KVectors::new(box_length, n_max, alpha, kappa, policy);
         let n_k = kvecs.len();
         let (sk_re, sk_im, sk_ipbc) = match policy {
             EwaldPolicy::PBC => (vec![0.0; n_k], vec![0.0; n_k], Vec::new()),
-            EwaldPolicy::IPBC => (Vec::new(), Vec::new(), vec![[0.0; 8]; n_k]),
+            EwaldPolicy::IPBC => (Vec::new(), Vec::new(), vec![0.0; n_k]),
         };
         Self {
             kvecs,
             box_length,
-            volume,
+            two_pi_over_v,
+            four_pi_over_v,
             alpha,
             kappa,
             n_max,
@@ -277,13 +281,7 @@ impl EwaldReciprocal {
     }
 
     /// Recompute all structure factors from scratch. $O(N \times N_k)$.
-    pub fn update_all<T: Into<f64> + Copy>(
-        &mut self,
-        x: &[T],
-        y: &[T],
-        z: &[T],
-        charges: &[T],
-    ) {
+    pub fn update_all<T: Into<f64> + Copy>(&mut self, x: &[T], y: &[T], z: &[T], charges: &[T]) {
         match self.policy {
             EwaldPolicy::PBC => {
                 self.sk_re.fill(0.0);
@@ -303,11 +301,11 @@ impl EwaldReciprocal {
                 }
             }
             EwaldPolicy::IPBC => {
-                self.sk_ipbc.fill([0.0; 8]);
+                self.sk_ipbc.fill(0.0);
                 for ((&charge, &px), (&py, &pz)) in
                     charges.iter().zip(x.iter()).zip(y.iter().zip(z.iter()))
                 {
-                    backend::scalar::update_all_ipbc(
+                    update_all_ipbc(
                         &self.kvecs,
                         px.into(),
                         py.into(),
@@ -321,12 +319,7 @@ impl EwaldReciprocal {
     }
 
     /// Commit a single-particle move. $O(N_k)$.
-    pub fn update_particle<T: Into<f64> + Copy>(
-        &mut self,
-        charge: T,
-        old: [T; 3],
-        new: [T; 3],
-    ) {
+    pub fn update_particle<T: Into<f64> + Copy>(&mut self, charge: T, old: [T; 3], new: [T; 3]) {
         let charge = charge.into();
         let old = [old[0].into(), old[1].into(), old[2].into()];
         let new = [new[0].into(), new[1].into(), new[2].into()];
@@ -342,13 +335,7 @@ impl EwaldReciprocal {
                 );
             }
             EwaldPolicy::IPBC => {
-                backend::scalar::update_particle_ipbc(
-                    &self.kvecs,
-                    charge,
-                    old,
-                    new,
-                    &mut self.sk_ipbc,
-                );
+                update_particle_ipbc(&self.kvecs, charge, old, new, &mut self.sk_ipbc);
             }
         }
     }
@@ -357,12 +344,11 @@ impl EwaldReciprocal {
     ///
     /// $$U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \, |S(\mathbf{k})|^2$$
     pub fn energy(&self) -> f64 {
-        let prefactor = 2.0 * PI / self.volume;
         let sum: f64 = match self.policy {
             EwaldPolicy::PBC => energy_pbc(&self.kvecs, &self.sk_re, &self.sk_im),
-            EwaldPolicy::IPBC => backend::scalar::energy_ipbc(&self.kvecs, &self.sk_ipbc),
+            EwaldPolicy::IPBC => energy_ipbc(&self.kvecs, &self.sk_ipbc),
         };
-        prefactor * sum
+        self.two_pi_over_v * sum
     }
 
     /// Energy change for a trial particle move, without mutating state. $O(N_k)$.
@@ -371,25 +357,17 @@ impl EwaldReciprocal {
     /// a full recomputation of structure factors, making MC trial moves $O(N_k)$ not $O(N \cdot N_k)$.
     ///
     /// $$\Delta U = \frac{2\pi}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \bigl[2\,S(\mathbf{k}) \cdot \Delta S(\mathbf{k}) + |\Delta S(\mathbf{k})|^2\bigr]$$
-    pub fn energy_change<T: Into<f64> + Copy>(
-        &self,
-        charge: T,
-        old: [T; 3],
-        new: [T; 3],
-    ) -> f64 {
+    pub fn energy_change<T: Into<f64> + Copy>(&self, charge: T, old: [T; 3], new: [T; 3]) -> f64 {
         let charge = charge.into();
         let old = [old[0].into(), old[1].into(), old[2].into()];
         let new = [new[0].into(), new[1].into(), new[2].into()];
-        let prefactor = 2.0 * PI / self.volume;
         let sum = match self.policy {
             EwaldPolicy::PBC => {
                 energy_change_pbc(&self.kvecs, &self.sk_re, &self.sk_im, charge, old, new)
             }
-            EwaldPolicy::IPBC => {
-                backend::scalar::energy_change_ipbc(&self.kvecs, &self.sk_ipbc, charge, old, new)
-            }
+            EwaldPolicy::IPBC => energy_change_ipbc(&self.kvecs, &self.sk_ipbc, charge, old, new),
         };
-        prefactor * sum
+        self.two_pi_over_v * sum
     }
 
     /// Force on one particle. $O(N_k)$. Returns `[fx, fy, fz]`.
@@ -398,10 +376,10 @@ impl EwaldReciprocal {
     pub fn force<T: Into<f64> + Copy>(&self, pos: [T; 3], charge: T) -> [f64; 3] {
         let charge = charge.into();
         let pos = [pos[0].into(), pos[1].into(), pos[2].into()];
-        let prefactor = 4.0 * PI * charge / self.volume;
+        let prefactor = self.four_pi_over_v * charge;
         let [fx, fy, fz] = match self.policy {
             EwaldPolicy::PBC => force_pbc(&self.kvecs, pos, &self.sk_re, &self.sk_im),
-            EwaldPolicy::IPBC => backend::scalar::force_ipbc(&self.kvecs, pos, &self.sk_ipbc),
+            EwaldPolicy::IPBC => force_ipbc(&self.kvecs, pos, &self.sk_ipbc),
         };
         [prefactor * fx, prefactor * fy, prefactor * fz]
     }
@@ -441,7 +419,13 @@ impl EwaldReciprocal {
     ///
     /// For Coulomb ($\kappa = 0$): $U_\text{self} = -(\alpha/\sqrt\pi) \sum_i q_i^2$.
     pub fn self_energy<T: Into<f64> + Copy>(&self, charges: &[T]) -> f64 {
-        let sum_q2: f64 = charges.iter().map(|&q| { let q: f64 = q.into(); q * q }).sum();
+        let sum_q2: f64 = charges
+            .iter()
+            .map(|&q| {
+                let q: f64 = q.into();
+                q * q
+            })
+            .sum();
         let alpha = self.alpha;
         let sqrt_pi = PI.sqrt();
 
@@ -451,7 +435,7 @@ impl EwaldReciprocal {
             let kappa = self.kappa;
             let exp_term = (-kappa * kappa / (4.0 * alpha * alpha)).exp();
             let erfc_term = crate::math::erfc_x(kappa / (2.0 * alpha));
-            (-alpha / sqrt_pi * exp_term + kappa / 2.0 * erfc_term) * sum_q2
+            (-alpha / sqrt_pi).mul_add(exp_term, kappa / 2.0 * erfc_term) * sum_q2
         } else {
             -alpha / sqrt_pi * sum_q2
         }
@@ -476,7 +460,7 @@ impl EwaldReciprocal {
             return 0.0;
         }
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
-        2.0 * PI / ((2.0 * eps_s + 1.0) * self.volume) * (dx * dx + dy * dy + dz * dz)
+        self.two_pi_over_v / 2.0f64.mul_add(eps_s, 1.0) * dz.mul_add(dz, dx.mul_add(dx, dy * dy))
     }
 
     /// Accumulate surface forces on all particles. $O(N)$.
@@ -499,7 +483,7 @@ impl EwaldReciprocal {
             return;
         }
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
-        let base = -4.0 * PI / ((2.0 * eps_s + 1.0) * self.volume);
+        let base = -self.four_pi_over_v / 2.0f64.mul_add(eps_s, 1.0);
         for ((&q, out_fx), (out_fy, out_fz)) in charges
             .iter()
             .zip(fx.iter_mut())
@@ -518,106 +502,41 @@ impl EwaldReciprocal {
     }
 
     /// The splitting parameter $\alpha$ (for diagnostics/pairing with real-space Ewald).
-    pub fn alpha(&self) -> f64 {
+    pub const fn alpha(&self) -> f64 {
         self.alpha
     }
 }
 
 // ── Backend dispatch: SIMD on x86_64, scalar elsewhere ──────────────────────
 
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-fn update_all_pbc(
-    kvecs: &KVectors,
-    px: f64,
-    py: f64,
-    pz: f64,
-    charge: f64,
-    sk_re: &mut [f64],
-    sk_im: &mut [f64],
-) {
-    backend::simd::update_all_pbc(kvecs, px, py, pz, charge, sk_re, sk_im);
+/// Generate a cfg-gated dispatch function that forwards to `backend::simd::$name`
+/// on x86_64 with the `simd` feature, and `backend::scalar::$name` otherwise.
+macro_rules! dispatch {
+    ($name:ident ( $($arg:ident : $ty:ty),* $(,)? ) -> $ret:ty) => {
+        #[cfg(all(feature = "simd", target_arch = "x86_64"))]
+        fn $name($($arg: $ty),*) -> $ret {
+            backend::simd::$name($($arg),*)
+        }
+        #[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
+        fn $name($($arg: $ty),*) -> $ret {
+            backend::scalar::$name($($arg),*)
+        }
+    };
 }
 
-#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-fn update_all_pbc(
-    kvecs: &KVectors,
-    px: f64,
-    py: f64,
-    pz: f64,
-    charge: f64,
-    sk_re: &mut [f64],
-    sk_im: &mut [f64],
-) {
-    backend::scalar::update_all_pbc(kvecs, px, py, pz, charge, sk_re, sk_im);
-}
+// PBC dispatch
+dispatch!(update_all_pbc(kvecs: &KVectors, px: f64, py: f64, pz: f64, charge: f64, sk_re: &mut [f64], sk_im: &mut [f64]) -> ());
+dispatch!(energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64);
+dispatch!(energy_change_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64], charge: f64, old: [f64; 3], new: [f64; 3]) -> f64);
+dispatch!(update_particle_pbc(kvecs: &KVectors, charge: f64, old: [f64; 3], new: [f64; 3], sk_re: &mut [f64], sk_im: &mut [f64]) -> ());
+dispatch!(force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3]);
 
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64 {
-    backend::simd::energy_pbc(kvecs, sk_re, sk_im)
-}
-
-#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64 {
-    backend::scalar::energy_pbc(kvecs, sk_re, sk_im)
-}
-
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-fn energy_change_pbc(
-    kvecs: &KVectors,
-    sk_re: &[f64],
-    sk_im: &[f64],
-    charge: f64,
-    old: [f64; 3],
-    new: [f64; 3],
-) -> f64 {
-    backend::simd::energy_change_pbc(kvecs, sk_re, sk_im, charge, old, new)
-}
-
-#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-fn energy_change_pbc(
-    kvecs: &KVectors,
-    sk_re: &[f64],
-    sk_im: &[f64],
-    charge: f64,
-    old: [f64; 3],
-    new: [f64; 3],
-) -> f64 {
-    backend::scalar::energy_change_pbc(kvecs, sk_re, sk_im, charge, old, new)
-}
-
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-fn update_particle_pbc(
-    kvecs: &KVectors,
-    charge: f64,
-    old: [f64; 3],
-    new: [f64; 3],
-    sk_re: &mut [f64],
-    sk_im: &mut [f64],
-) {
-    backend::simd::update_particle_pbc(kvecs, charge, old, new, sk_re, sk_im);
-}
-
-#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-fn update_particle_pbc(
-    kvecs: &KVectors,
-    charge: f64,
-    old: [f64; 3],
-    new: [f64; 3],
-    sk_re: &mut [f64],
-    sk_im: &mut [f64],
-) {
-    backend::scalar::update_particle_pbc(kvecs, charge, old, new, sk_re, sk_im);
-}
-
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3] {
-    backend::simd::force_pbc(kvecs, pos, sk_re, sk_im)
-}
-
-#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3] {
-    backend::scalar::force_pbc(kvecs, pos, sk_re, sk_im)
-}
+// IPBC dispatch
+dispatch!(update_all_ipbc(kvecs: &KVectors, px: f64, py: f64, pz: f64, charge: f64, sk_ipbc: &mut [f64]) -> ());
+dispatch!(energy_ipbc(kvecs: &KVectors, sk_ipbc: &[f64]) -> f64);
+dispatch!(energy_change_ipbc(kvecs: &KVectors, sk_ipbc: &[f64], charge: f64, old: [f64; 3], new: [f64; 3]) -> f64);
+dispatch!(update_particle_ipbc(kvecs: &KVectors, charge: f64, old: [f64; 3], new: [f64; 3], sk_ipbc: &mut [f64]) -> ());
+dispatch!(force_ipbc(kvecs: &KVectors, pos: [f64; 3], sk_ipbc: &[f64]) -> [f64; 3]);
 
 /// Calculate the dipole moment: Σ q_i r_i, returned as [dx, dy, dz].
 fn dipole_moment<T: Into<f64> + Copy>(x: &[T], y: &[T], z: &[T], charges: &[T]) -> [f64; 3] {
@@ -627,7 +546,7 @@ fn dipole_moment<T: Into<f64> + Copy>(x: &[T], y: &[T], z: &[T], charges: &[T]) 
         .zip(y.iter().zip(z.iter()))
         .fold([0.0; 3], |[dx, dy, dz], ((&q, &px), (&py, &pz))| {
             let (q, px, py, pz) = (q.into(), px.into(), py.into(), pz.into());
-            [dx + q * px, dy + q * py, dz + q * pz]
+            [q.mul_add(px, dx), q.mul_add(py, dy), q.mul_add(pz, dz)]
         })
 }
 
@@ -979,21 +898,37 @@ mod tests {
     }
 
     #[test]
-    fn test_ipbc_reciprocal_energy_matches_pbc_for_axis_config() {
-        // For charges along one axis, IPBC 8-component Σ Q² equals PBC |S|².
-        // With octant factors matching half-shell factors, energies should agree.
+    fn test_ipbc_cos_symmetry_antisymmetric_charges() {
+        // For charges ±1 at (±a, 0, 0), the cos-product structure factor
+        // Q_k = cos(kx·(-a))·1·1 + (-1)·cos(kx·a)·1·1 = 0 because cos is even.
+        // So the IPBC reciprocal energy should be exactly zero.
         let alpha = 0.894427;
-        let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
-        let charges = [1.0, -1.0];
-
-        let mut pbc = EwaldReciprocal::with_parameters([10.0; 3], alpha, 0.0, 11);
-        pbc.update_all(&x, &y, &z, &charges);
-
         let mut ipbc = EwaldReciprocal::with_parameters([10.0; 3], alpha, 0.0, 11)
             .with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&x, &y, &z, &charges);
+        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0]);
+        assert_relative_eq!(ipbc.energy(), 0.0, epsilon = 1e-12);
+    }
 
-        assert_relative_eq!(ipbc.energy(), pbc.energy(), epsilon = 1e-6);
+    #[test]
+    fn test_ipbc_reciprocal_energy_faunus_reference() {
+        // Reference: faunus/src/energy.cpp IPBC subcase
+        // Two particles: q=+1 at (0,0,0), q=-1 at (1,0,0)
+        // box=10, alpha=0.894427190999916, n_max=11, bjerrum_length=1
+        let alpha = 0.894427190999916;
+        let mut ipbc = EwaldReciprocal::with_parameters([10.0; 3], alpha, 0.0, 11)
+            .with_policy(EwaldPolicy::IPBC);
+        ipbc.update_all(&[0.0, 1.0], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0]);
+        assert_relative_eq!(ipbc.energy(), 0.0865107467, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_ipbc_nonzero_for_same_sign_charges() {
+        // Same-sign charges: Q_k = cos(kx·(-a)) + cos(kx·a) = 2·cos(kx·a) ≠ 0
+        let alpha = 0.894427;
+        let mut ipbc = EwaldReciprocal::with_parameters([10.0; 3], alpha, 0.0, 11)
+            .with_policy(EwaldPolicy::IPBC);
+        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, 1.0]);
+        assert!(ipbc.energy() > 0.0);
     }
 
     #[test]
