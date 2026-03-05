@@ -94,7 +94,7 @@
 //! let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
 //! # let (x, y, z) = (vec![-0.5, 0.5], vec![0.0, 0.0], vec![0.0, 0.0]);
 //! # let charges = vec![1.0, -1.0];
-//! ewald.update_all(&x, &y, &z, &charges);
+//! ewald.update_all(&x, &y, &z, &charges, None);
 //! # let (old, new) = ([-0.5, 0.0, 0.0], [-0.3, 0.0, 0.0]);
 //! let de = ewald.energy_change(1.0, old, new);
 //! // if accept { ewald.update_particle(1.0, old, new); }
@@ -106,7 +106,7 @@
 //! let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
 //! # let (x, y, z) = (vec![-0.5, 0.5], vec![0.0, 0.0], vec![0.0, 0.0]);
 //! # let charges = vec![1.0, -1.0];
-//! ewald.update_all(&x, &y, &z, &charges);
+//! ewald.update_all(&x, &y, &z, &charges, None);
 //! let (mut fx, mut fy, mut fz) = (vec![0.0; 2], vec![0.0; 2], vec![0.0; 2]);
 //! ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
 //! ```
@@ -158,7 +158,7 @@ pub struct EwaldReciprocal {
     n_max: u32,
     /// Real-space cutoff paired with this reciprocal instance.
     real_cutoff: f64,
-    /// Target accuracy, stored for `set_box_length()` rebuild.
+    /// Target accuracy, stored for box-resize rebuild in `update_all()`.
     accuracy: f64,
     boundary: ConstantPermittivity,
     policy: EwaldPolicy,
@@ -230,23 +230,6 @@ impl EwaldReciprocal {
         self.boundary = boundary;
     }
 
-    /// Update the box dimensions, recomputing n_max, k-vectors, and prefactors.
-    ///
-    /// Uses the stored real-space cutoff and accuracy to recompute $\alpha$ and $n_\text{max}$.
-    /// Structure factors are reset and must be rebuilt with [`Self::update_all`].
-    /// Useful for NPT or Gibbs ensemble simulations where the box changes.
-    pub fn set_box_length(&mut self, box_length: [f64; 3]) {
-        let boundary = self.boundary;
-        *self = Self::build(
-            box_length,
-            self.real_cutoff,
-            self.accuracy,
-            self.kappa,
-            self.policy,
-        );
-        self.boundary = boundary;
-    }
-
     /// Internal constructor shared by all public constructors.
     fn build(
         box_length: [f64; 3],
@@ -286,7 +269,29 @@ impl EwaldReciprocal {
     }
 
     /// Recompute all structure factors from scratch. $O(N \times N_k)$.
-    pub fn update_all<T: Into<f64> + Copy>(&mut self, x: &[T], y: &[T], z: &[T], charges: &[T]) {
+    ///
+    /// If `box_length` is provided, the box dimensions are updated first, recomputing
+    /// $\alpha$, $n_\text{max}$, and k-vectors. Useful for NPT or Gibbs ensemble
+    /// simulations where the box changes between full updates.
+    pub fn update_all<T: Into<f64> + Copy>(
+        &mut self,
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
+        box_length: Option<[f64; 3]>,
+    ) {
+        if let Some(box_length) = box_length {
+            let boundary = self.boundary;
+            *self = Self::build(
+                box_length,
+                self.real_cutoff,
+                self.accuracy,
+                self.kappa,
+                self.policy,
+            );
+            self.boundary = boundary;
+        }
         match self.policy {
             EwaldPolicy::PBC => {
                 self.sk_re.fill(0.0);
@@ -599,7 +604,7 @@ mod tests {
         let y = [0.0, 0.0];
         let z = [0.0, 0.0];
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         (ewald, x, y, z, charges)
     }
 
@@ -640,7 +645,7 @@ mod tests {
         ewald.set_boundary(crate::permittivity::VACUUM);
         let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         assert_relative_eq!(
             ewald.surface_energy(&x, &y, &z, &charges),
             0.0020943951,
@@ -677,14 +682,14 @@ mod tests {
         let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
         let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
 
         let [fx, _, _] = ewald.force([x[0], y[0], z[0]], charges[0]);
 
         let delta = 1e-5;
-        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges);
+        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None);
         let e_plus = ewald.energy();
-        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges);
+        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None);
         let e_minus = ewald.energy();
         let numerical_fx = -(e_plus - e_minus) / (2.0 * delta);
         assert_relative_eq!(fx, numerical_fx, epsilon = 1e-3);
@@ -700,7 +705,7 @@ mod tests {
         );
         let charges = [1.0, -1.0, 0.5, -0.5];
 
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
 
         let old = [x[0], y[0], z[0]];
         let new = [1.5, 2.5, 3.5];
@@ -710,7 +715,7 @@ mod tests {
         let x2 = [1.5, -1.0, 2.0, -2.0];
         let y2 = [2.5, 0.5, -1.0, 1.0];
         let z2 = [3.5, -0.5, 1.5, -1.0];
-        ewald.update_all(&x2, &y2, &z2, &charges);
+        ewald.update_all(&x2, &y2, &z2, &charges, None);
         let e_full = ewald.energy();
 
         assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
@@ -726,7 +731,7 @@ mod tests {
         );
         let charges = [1.0, -1.0, 0.5, -0.5];
 
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         let e_before = ewald.energy();
 
         let old = [x[0], y[0], z[0]];
@@ -745,10 +750,10 @@ mod tests {
         let charges = [1.0, -1.0];
 
         let mut ewald_c = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        ewald_c.update_all(&x, &y, &z, &charges);
+        ewald_c.update_all(&x, &y, &z, &charges, None);
 
         let mut ewald_y = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(1e-10));
-        ewald_y.update_all(&x, &y, &z, &charges);
+        ewald_y.update_all(&x, &y, &z, &charges, None);
 
         assert_relative_eq!(ewald_c.energy(), ewald_y.energy(), epsilon = 1e-6);
     }
@@ -761,7 +766,7 @@ mod tests {
         let mut energies = Vec::new();
         for &kappa in &[0.0, 0.1, 0.5, 1.0] {
             let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(kappa));
-            ewald.update_all(&x, &y, &z, &charges);
+            ewald.update_all(&x, &y, &z, &charges, None);
             energies.push(ewald.energy().abs());
         }
         for i in 1..energies.len() {
@@ -882,7 +887,7 @@ mod tests {
 
         // Reciprocal space
         let mut ewald = EwaldReciprocal::new([l_box; 3], r_c, 1e-8, None);
-        ewald.update_all(&px, &py, &pz, &charges);
+        ewald.update_all(&px, &py, &pz, &charges, None);
         let e_recip = ewald.energy();
         let e_self = ewald.self_energy(&charges);
 
@@ -930,7 +935,7 @@ mod tests {
         // So the IPBC reciprocal energy should be exactly zero.
         let mut ipbc =
             EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0]);
+        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0], None);
         assert_relative_eq!(ipbc.energy(), 0.0, epsilon = 1e-12);
     }
 
@@ -939,7 +944,7 @@ mod tests {
         // Two particles: q=+1 at (0,0,0), q=-1 at (1,0,0)
         let mut ipbc =
             EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&[0.0, 1.0], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0]);
+        ipbc.update_all(&[0.0, 1.0], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0], None);
         // Opposite charges separated along x: positive reciprocal energy
         assert!(ipbc.energy() > 0.0);
     }
@@ -949,7 +954,7 @@ mod tests {
         // Same-sign charges: Q_k = cos(kx·(-a)) + cos(kx·a) = 2·cos(kx·a) ≠ 0
         let mut ipbc =
             EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, 1.0]);
+        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, 1.0], None);
         assert!(ipbc.energy() > 0.0);
     }
 
@@ -974,7 +979,7 @@ mod tests {
         ewald.set_boundary(crate::permittivity::VACUUM);
         let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         assert_relative_eq!(
             ewald.surface_energy(&x, &y, &z, &charges),
             0.0020943951023931952,
@@ -993,7 +998,7 @@ mod tests {
         );
         let charges = [1.0, -1.0, 0.5, -0.5];
 
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
 
         let old = [x[0], y[0], z[0]];
         let new_pos = [1.5, 2.5, 3.5];
@@ -1003,7 +1008,7 @@ mod tests {
         let x2 = [1.5, -1.0, 2.0, -2.0];
         let y2 = [2.5, 0.5, -1.0, 1.0];
         let z2 = [3.5, -0.5, 1.5, -1.0];
-        ewald.update_all(&x2, &y2, &z2, &charges);
+        ewald.update_all(&x2, &y2, &z2, &charges, None);
         let e_full = ewald.energy();
 
         assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
@@ -1020,7 +1025,7 @@ mod tests {
         );
         let charges = [1.0, -1.0, 0.5, -0.5];
 
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         let e_before = ewald.energy();
 
         let old = [x[0], y[0], z[0]];
@@ -1039,29 +1044,29 @@ mod tests {
             EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
         let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
 
         let [fx, fy, fz] = ewald.force([x[0], y[0], z[0]], charges[0]);
 
         let delta = 1e-5;
         // Numerical gradient for x
-        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges);
+        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None);
         let e_plus = ewald.energy();
-        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges);
+        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None);
         let e_minus = ewald.energy();
         assert_relative_eq!(fx, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
 
         // Numerical gradient for y
-        ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges);
+        ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges, None);
         let e_plus = ewald.energy();
-        ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges);
+        ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges, None);
         let e_minus = ewald.energy();
         assert_relative_eq!(fy, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
 
         // Numerical gradient for z
-        ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges);
+        ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges, None);
         let e_plus = ewald.energy();
-        ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges);
+        ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges, None);
         let e_minus = ewald.energy();
         assert_relative_eq!(fz, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
     }
@@ -1073,7 +1078,7 @@ mod tests {
         let y: [f32; 2] = [0.0, 0.0];
         let z: [f32; 2] = [0.0, 0.0];
         let charges: [f32; 2] = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         let e = ewald.energy();
         assert!(e.abs() > 0.0);
 
@@ -1093,7 +1098,7 @@ mod tests {
             EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
         let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
         let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         let mut fx = [0.0; 2];
         let mut fy = [0.0; 2];
         let mut fz = [0.0; 2];

@@ -56,6 +56,7 @@ fn bench_update_all(c: &mut Criterion) {
                         black_box(&y),
                         black_box(&z),
                         black_box(&charges),
+                        None,
                     )
                 });
             },
@@ -67,7 +68,7 @@ fn bench_update_all(c: &mut Criterion) {
 fn bench_energy(c: &mut Criterion) {
     let (x, y, z, charges, l_box) = nacl_system(3);
     let mut ewald = EwaldReciprocal::new([l_box; 3], l_box / 2.0, 1e-5, None);
-    ewald.update_all(&x, &y, &z, &charges);
+    ewald.update_all(&x, &y, &z, &charges, None);
     let n_k = ewald.num_k_vectors();
 
     c.bench_function(&format!("energy (N_k={n_k})"), |b| {
@@ -78,7 +79,7 @@ fn bench_energy(c: &mut Criterion) {
 fn bench_energy_change(c: &mut Criterion) {
     let (x, y, z, charges, l_box) = nacl_system(3);
     let mut ewald = EwaldReciprocal::new([l_box; 3], l_box / 2.0, 1e-5, None);
-    ewald.update_all(&x, &y, &z, &charges);
+    ewald.update_all(&x, &y, &z, &charges, None);
     let n_k = ewald.num_k_vectors();
     let old = [x[0], y[0], z[0]];
     let new = [x[0] + 0.1, y[0] + 0.05, z[0] - 0.1];
@@ -91,7 +92,7 @@ fn bench_energy_change(c: &mut Criterion) {
 fn bench_update_particle(c: &mut Criterion) {
     let (x, y, z, charges, l_box) = nacl_system(3);
     let mut ewald = EwaldReciprocal::new([l_box; 3], l_box / 2.0, 1e-5, None);
-    ewald.update_all(&x, &y, &z, &charges);
+    ewald.update_all(&x, &y, &z, &charges, None);
     let n_k = ewald.num_k_vectors();
     let old = [x[0], y[0], z[0]];
     let new = [x[0] + 0.1, y[0] + 0.05, z[0] - 0.1];
@@ -111,7 +112,7 @@ fn bench_add_forces(c: &mut Criterion) {
         let (x, y, z, charges, l_box) = nacl_system(n_cells);
         let n = x.len();
         let mut ewald = EwaldReciprocal::new([l_box; 3], l_box / 2.0, 1e-5, None);
-        ewald.update_all(&x, &y, &z, &charges);
+        ewald.update_all(&x, &y, &z, &charges, None);
         let mut fx = vec![0.0; n];
         let mut fy = vec![0.0; n];
         let mut fz = vec![0.0; n];
@@ -167,6 +168,7 @@ fn bench_ipbc_update_all(c: &mut Criterion) {
                         black_box(&y),
                         black_box(&z),
                         black_box(&charges),
+                        None,
                     )
                 });
             },
@@ -179,7 +181,7 @@ fn bench_ipbc_energy_change(c: &mut Criterion) {
     let (x, y, z, charges, l_box) = nacl_system(3);
     let mut ewald =
         EwaldReciprocal::new([l_box; 3], l_box / 2.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-    ewald.update_all(&x, &y, &z, &charges);
+    ewald.update_all(&x, &y, &z, &charges, None);
     let n_k = ewald.num_k_vectors();
     let old = [x[0], y[0], z[0]];
     let new = [x[0] + 0.1, y[0] + 0.05, z[0] - 0.1];
