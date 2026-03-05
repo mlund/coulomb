@@ -652,6 +652,91 @@ mod tests {
     }
 
     #[test]
+    fn test_madelung_nacl() {
+        use crate::pairwise::{MultipoleEnergy, RealSpaceEwald};
+
+        // NaCl Madelung constant via full Ewald summation (real + reciprocal + self).
+        // 2×2×2 supercell: 64 ions in a cubic box with nearest-neighbor distance a = 1.
+        let a = 1.0;
+        let l_cell = 2.0 * a;
+        let n_rep = 2_usize;
+        let l_box = l_cell * n_rep as f64;
+
+        // NaCl basis in conventional cell (lattice constant = 2a)
+        let na_basis: [[f64; 3]; 4] = [
+            [0.0, 0.0, 0.0],
+            [a, a, 0.0],
+            [a, 0.0, a],
+            [0.0, a, a],
+        ];
+        let cl_basis: [[f64; 3]; 4] = [
+            [a, 0.0, 0.0],
+            [0.0, a, 0.0],
+            [0.0, 0.0, a],
+            [a, a, a],
+        ];
+
+        let mut positions: Vec<Vector3> = Vec::with_capacity(64);
+        let mut charges: Vec<f64> = Vec::with_capacity(64);
+        for ix in 0..n_rep {
+            for iy in 0..n_rep {
+                for iz in 0..n_rep {
+                    let ox = ix as f64 * l_cell;
+                    let oy = iy as f64 * l_cell;
+                    let oz = iz as f64 * l_cell;
+                    for b in &na_basis {
+                        positions.push([b[0] + ox, b[1] + oy, b[2] + oz].into());
+                        charges.push(1.0);
+                    }
+                    for b in &cl_basis {
+                        positions.push([b[0] + ox, b[1] + oy, b[2] + oz].into());
+                        charges.push(-1.0);
+                    }
+                }
+            }
+        }
+        assert_eq!(positions.len(), 64);
+
+        let alpha = 2.5;
+        let r_c = l_box / 2.0 - 0.01;
+        let k_max = 10;
+        let box_length: Vector3 = [l_box, l_box, l_box].into();
+
+        // Reciprocal space
+        let mut ewald =
+            EwaldReciprocal::new(box_length, alpha, 0.0, k_max, BoundaryPermittivity::Tinfoil);
+        ewald.update_all(&positions, &charges);
+        let e_recip = ewald.energy();
+        let e_self = ewald.self_energy(&charges);
+
+        // Real space: minimum-image pairwise sum
+        let real_ewald = RealSpaceEwald::new_without_salt(r_c, alpha);
+        let n = positions.len();
+        let mut e_real = 0.0;
+        for i in 0..n {
+            let pi: NalgebraVector3 = positions[i].into();
+            for j in (i + 1)..n {
+                let pj: NalgebraVector3 = positions[j].into();
+                let mut dr = pi - pj;
+                dr.x -= l_box * (dr.x / l_box).round();
+                dr.y -= l_box * (dr.y / l_box).round();
+                dr.z -= l_box * (dr.z / l_box).round();
+                let r = dr.norm();
+                if r < r_c {
+                    e_real += real_ewald.ion_ion_energy(charges[i], charges[j], r);
+                }
+            }
+        }
+
+        let e_total = e_real + e_recip + e_self;
+        let n_pairs = n / 2;
+        let madelung = -e_total * a / n_pairs as f64;
+
+        // NaCl Madelung constant: 1.7475645946...
+        assert_relative_eq!(madelung, 1.7475645946, epsilon = 1e-4);
+    }
+
+    #[test]
     fn test_surface_forces_tinfoil_zero() {
         let box_length: Vector3 = [10.0, 10.0, 10.0].into();
         let ewald =
