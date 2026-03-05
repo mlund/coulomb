@@ -4,75 +4,51 @@ use core::f64::consts::PI;
 pub(super) struct OptimizedParameters {
     pub alpha: f64,
     pub real_cutoff: f64,
-    pub k_max: u32,
+    pub n_max: u32,
 }
 
-/// Optimize Ewald parameters for a given accuracy target.
+/// Analytical Ewald parameter selection for a given accuracy target.
 ///
-/// Balances real-space and reciprocal-space errors to minimize total work.
-/// Uses the error estimates from Kolafa & Perram (1992) for Coulomb,
-/// extended for Yukawa following Salin & Caillol (2000).
+/// Uses the Kolafa–Perram error estimates:
+/// - `r_c = L_min / 2` (maximum cutoff under minimum image convention)
+/// - `α = √(−ln ε) / r_c` (balances real-space error ~ exp(−α²r_c²))
+/// - `n_max = ⌈α·L_max/π · √(−ln ε)⌉` (reciprocal-space convergence)
 ///
-/// - `box_length`: Side lengths `[Lx, Ly, Lz]` of the orthorhombic box
-/// - `kappa`: Inverse Debye screening length (0 for Coulomb)
-/// - `accuracy`: Target relative energy accuracy (e.g. 1e-5)
-/// - `num_particles`: Number of particles (affects cost balance)
+/// For Yukawa (κ > 0), Salin & Caillol (<https://doi.org/10.1063/1.1326477>)
+/// proved that the optimal splitting parameter is independent of κ (Eq. 3.3),
+/// so the same parameters work for both Coulomb and Yukawa potentials.
 pub(super) fn optimize_ewald_parameters(
     box_length: &[f64; 3],
-    kappa: f64,
     accuracy: f64,
-    num_particles: usize,
 ) -> OptimizedParameters {
+    debug_assert!(
+        accuracy > 0.0 && accuracy < 1.0,
+        "accuracy must be in (0, 1)"
+    );
+    debug_assert!(
+        box_length.iter().all(|&l| l > 0.0),
+        "box lengths must be positive"
+    );
+
     let l_min = box_length[0].min(box_length[1]).min(box_length[2]);
-    let half_l = l_min / 2.0;
-    let n = num_particles as f64;
+    let l_max = box_length[0].max(box_length[1]).max(box_length[2]);
+    let neg_ln_eps = -accuracy.ln(); // always positive since ε < 1
 
-    let volume = box_length[0] * box_length[1] * box_length[2];
+    // Real-space cutoff: half the shortest box side (minimum image convention limit)
+    let real_cutoff = l_min / 2.0;
 
-    let mut best_alpha = 1.0;
-    let mut best_rc = half_l * 0.5;
-    let mut best_kmax = 5_u32;
-    let mut best_cost = f64::INFINITY;
+    // Splitting parameter: ensures real-space error ~ exp(−α²r_c²) ≈ ε
+    let alpha = neg_ln_eps.sqrt() / real_cutoff;
 
-    for i in 1..=100 {
-        let alpha = 0.05 * i as f64;
-
-        let rc = (-accuracy.ln()).sqrt() / alpha;
-        if rc >= half_l || rc <= 0.0 {
-            continue;
-        }
-
-        let k_max_f = alpha * l_min / PI * (-accuracy.ln()).sqrt();
-        let k_max = (k_max_f.ceil() as u32).max(1);
-
-        let k_max = if kappa > 0.0 {
-            let kappa_factor = (-kappa * kappa / (4.0 * alpha * alpha)).exp();
-            let k_max_adjusted = (k_max as f64 * kappa_factor.sqrt().max(0.3)) as u32;
-            k_max_adjusted.max(1)
-        } else {
-            k_max
-        };
-
-        let real_cost = n * (4.0 / 3.0 * PI * rc.powi(3) / volume * n);
-        let recip_cost = n * (k_max as f64).powi(3);
-        let cost = real_cost + recip_cost;
-
-        let real_err = (-alpha * alpha * rc * rc).exp() / rc * (-kappa * rc).exp();
-        let k_min = 2.0 * PI / l_min;
-        let recip_err = (-(k_min * k_min + kappa * kappa) / (4.0 * alpha * alpha)).exp();
-
-        if real_err < accuracy && recip_err < accuracy && cost < best_cost {
-            best_cost = cost;
-            best_alpha = alpha;
-            best_rc = rc;
-            best_kmax = k_max;
-        }
-    }
+    // Reciprocal cutoff: ensures k-space error ~ exp(−k_min²/(4α²)) ≈ ε
+    // For non-cubic boxes, scale by L_max/L_min to cover the longest axis.
+    let n_max_f = alpha * l_max / PI * neg_ln_eps.sqrt();
+    let n_max = (n_max_f.ceil() as u32).max(1);
 
     OptimizedParameters {
-        alpha: best_alpha,
-        real_cutoff: best_rc,
-        k_max: best_kmax,
+        alpha,
+        real_cutoff,
+        n_max,
     }
 }
 
@@ -82,24 +58,35 @@ mod tests {
 
     #[test]
     fn test_optimize_returns_valid_parameters() {
-        let params = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 0.0, 1e-5, 100);
+        let params = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 1e-5);
         assert!(params.alpha > 0.0);
-        assert!(params.real_cutoff > 0.0);
-        assert!(params.real_cutoff < 5.0);
-        assert!(params.k_max >= 1);
-    }
-
-    #[test]
-    fn test_yukawa_needs_fewer_kvectors() {
-        let params_c = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 0.0, 1e-5, 100);
-        let params_y = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 0.5, 1e-5, 100);
-        assert!(params_y.k_max <= params_c.k_max);
+        assert_eq!(params.real_cutoff, 5.0); // L_min / 2
+        assert!(params.n_max >= 1);
     }
 
     #[test]
     fn test_higher_accuracy_needs_more_kvectors() {
-        let params_low = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 0.0, 1e-3, 100);
-        let params_high = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 0.0, 1e-7, 100);
-        assert!(params_high.k_max >= params_low.k_max);
+        let params_low = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 1e-3);
+        let params_high = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 1e-7);
+        assert!(params_high.n_max >= params_low.n_max);
+        assert!(params_high.alpha >= params_low.alpha);
+    }
+
+    #[test]
+    fn test_non_cubic_box() {
+        let params = optimize_ewald_parameters(&[10.0, 10.0, 20.0], 1e-5);
+        // r_c based on shortest side
+        assert_eq!(params.real_cutoff, 5.0);
+        // n_max should be larger than cubic due to L_max/L_min scaling
+        let params_cubic = optimize_ewald_parameters(&[10.0, 10.0, 10.0], 1e-5);
+        assert!(params.n_max >= params_cubic.n_max);
+    }
+
+    #[test]
+    fn test_reference_parameters() {
+        // For L=10, ε≈1e-5: α ≈ √(11.5)/5 ≈ 0.678, n_max ≈ ⌈0.678·10/π·√11.5⌉ = ⌈7.3⌉ = 8
+        let params = optimize_ewald_parameters(&[10.0; 3], 1e-5);
+        assert!(params.alpha > 0.5 && params.alpha < 1.0);
+        assert!(params.n_max >= 5 && params.n_max <= 12);
     }
 }
