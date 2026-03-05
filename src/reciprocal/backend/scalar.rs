@@ -1,6 +1,7 @@
 use super::super::kvectors::KVectors;
 
 /// Accumulate one particle's contribution into PBC structure factors.
+/// K-vectors are f32; sin/cos computed in f32; accumulated into f64.
 #[inline]
 pub(in super::super) fn update_all_pbc(
     kvecs: &KVectors,
@@ -11,6 +12,9 @@ pub(in super::super) fn update_all_pbc(
     sk_re: &mut [f64],
     sk_im: &mut [f64],
 ) {
+    let px = px as f32;
+    let py = py as f32;
+    let pz = pz as f32;
     for ((((&kx, &ky), &kz), sr), si) in kvecs
         .kx
         .iter()
@@ -20,8 +24,8 @@ pub(in super::super) fn update_all_pbc(
         .zip(sk_im.iter_mut())
     {
         let (sin_kr, cos_kr) = (kx * px + ky * py + kz * pz).sin_cos();
-        *sr += charge * cos_kr;
-        *si += charge * sin_kr;
+        *sr += charge * cos_kr as f64;
+        *si += charge * sin_kr as f64;
     }
 }
 
@@ -35,6 +39,9 @@ pub(in super::super) fn update_all_ipbc(
     charge: f64,
     sk_ipbc: &mut [[f64; 8]],
 ) {
+    let px = px as f32;
+    let py = py as f32;
+    let pz = pz as f32;
     for (((&kx, &ky), &kz), sk) in kvecs
         .kx
         .iter()
@@ -45,6 +52,9 @@ pub(in super::super) fn update_all_ipbc(
         let (sx, cx) = (kx * px).sin_cos();
         let (sy, cy) = (ky * py).sin_cos();
         let (sz, cz) = (kz * pz).sin_cos();
+        let (sx, cx) = (sx as f64, cx as f64);
+        let (sy, cy) = (sy as f64, cy as f64);
+        let (sz, cz) = (sz as f64, cz as f64);
         sk[0] += charge * cx * cy * cz;
         sk[1] += charge * cx * cy * sz;
         sk[2] += charge * cx * sy * cz;
@@ -64,7 +74,7 @@ pub(in super::super) fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64
         .iter()
         .zip(sk_re.iter())
         .zip(sk_im.iter())
-        .map(|((&ak, &re), &im)| ak * (re * re + im * im))
+        .map(|((&ak, &re), &im)| ak as f64 * (re * re + im * im))
         .sum()
 }
 
@@ -75,7 +85,7 @@ pub(in super::super) fn energy_ipbc(kvecs: &KVectors, sk_ipbc: &[[f64; 8]]) -> f
         .aks
         .iter()
         .zip(sk_ipbc.iter())
-        .map(|(&ak, sk)| ak * sk.iter().map(|&v| v * v).sum::<f64>())
+        .map(|(&ak, sk)| ak as f64 * sk.iter().map(|&v| v * v).sum::<f64>())
         .sum()
 }
 
@@ -89,6 +99,8 @@ pub(in super::super) fn energy_change_pbc(
     old: [f64; 3],
     new: [f64; 3],
 ) -> f64 {
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     let mut sum = 0.0;
     for (((((&kx, &ky), &kz), &ak), &s_re), &s_im) in kvecs
         .kx
@@ -99,13 +111,15 @@ pub(in super::super) fn energy_change_pbc(
         .zip(sk_re.iter())
         .zip(sk_im.iter())
     {
-        let (sin_old, cos_old) = (kx * old[0] + ky * old[1] + kz * old[2]).sin_cos();
-        let (sin_new, cos_new) = (kx * new[0] + ky * new[1] + kz * new[2]).sin_cos();
-        let ds_re = charge * (cos_new - cos_old);
-        let ds_im = charge * (sin_new - sin_old);
+        let (sin_old, cos_old) =
+            (kx * old_f32[0] + ky * old_f32[1] + kz * old_f32[2]).sin_cos();
+        let (sin_new, cos_new) =
+            (kx * new_f32[0] + ky * new_f32[1] + kz * new_f32[2]).sin_cos();
+        let ds_re = charge * (cos_new - cos_old) as f64;
+        let ds_im = charge * (sin_new - sin_old) as f64;
         let cross = 2.0 * (s_re * ds_re + s_im * ds_im);
         let ds_sq = ds_re * ds_re + ds_im * ds_im;
-        sum += ak * (cross + ds_sq);
+        sum += ak as f64 * (cross + ds_sq);
     }
     sum
 }
@@ -119,6 +133,8 @@ pub(in super::super) fn energy_change_ipbc(
     old: [f64; 3],
     new: [f64; 3],
 ) -> f64 {
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     let mut sum = 0.0;
     for ((((&kx, &ky), &kz), &ak), sk) in kvecs
         .kx
@@ -128,12 +144,18 @@ pub(in super::super) fn energy_change_ipbc(
         .zip(kvecs.aks.iter())
         .zip(sk_ipbc.iter())
     {
-        let (sox, cox) = (kx * old[0]).sin_cos();
-        let (soy, coy) = (ky * old[1]).sin_cos();
-        let (soz, coz) = (kz * old[2]).sin_cos();
-        let (snx, cnx) = (kx * new[0]).sin_cos();
-        let (sny, cny) = (ky * new[1]).sin_cos();
-        let (snz, cnz) = (kz * new[2]).sin_cos();
+        let (sox, cox) = (kx * old_f32[0]).sin_cos();
+        let (soy, coy) = (ky * old_f32[1]).sin_cos();
+        let (soz, coz) = (kz * old_f32[2]).sin_cos();
+        let (snx, cnx) = (kx * new_f32[0]).sin_cos();
+        let (sny, cny) = (ky * new_f32[1]).sin_cos();
+        let (snz, cnz) = (kz * new_f32[2]).sin_cos();
+        let (sox, cox) = (sox as f64, cox as f64);
+        let (soy, coy) = (soy as f64, coy as f64);
+        let (soz, coz) = (soz as f64, coz as f64);
+        let (snx, cnx) = (snx as f64, cnx as f64);
+        let (sny, cny) = (sny as f64, cny as f64);
+        let (snz, cnz) = (snz as f64, cnz as f64);
         let ds = [
             charge * (cnx * cny * cnz - cox * coy * coz),
             charge * (cnx * cny * snz - cox * coy * soz),
@@ -150,7 +172,7 @@ pub(in super::super) fn energy_change_ipbc(
             .fold((0.0, 0.0), |(c, d), (&s, &delta)| {
                 (c + s * delta, d + delta * delta)
             });
-        sum += ak * (2.0 * cross + ds_sq);
+        sum += ak as f64 * (2.0 * cross + ds_sq);
     }
     sum
 }
@@ -165,6 +187,8 @@ pub(in super::super) fn update_particle_pbc(
     sk_re: &mut [f64],
     sk_im: &mut [f64],
 ) {
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     for ((((&kx, &ky), &kz), sr), si) in kvecs
         .kx
         .iter()
@@ -173,10 +197,12 @@ pub(in super::super) fn update_particle_pbc(
         .zip(sk_re.iter_mut())
         .zip(sk_im.iter_mut())
     {
-        let (sin_old, cos_old) = (kx * old[0] + ky * old[1] + kz * old[2]).sin_cos();
-        let (sin_new, cos_new) = (kx * new[0] + ky * new[1] + kz * new[2]).sin_cos();
-        *sr += charge * (cos_new - cos_old);
-        *si += charge * (sin_new - sin_old);
+        let (sin_old, cos_old) =
+            (kx * old_f32[0] + ky * old_f32[1] + kz * old_f32[2]).sin_cos();
+        let (sin_new, cos_new) =
+            (kx * new_f32[0] + ky * new_f32[1] + kz * new_f32[2]).sin_cos();
+        *sr += charge * (cos_new - cos_old) as f64;
+        *si += charge * (sin_new - sin_old) as f64;
     }
 }
 
@@ -189,6 +215,8 @@ pub(in super::super) fn update_particle_ipbc(
     new: [f64; 3],
     sk_ipbc: &mut [[f64; 8]],
 ) {
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     for (((&kx, &ky), &kz), sk) in kvecs
         .kx
         .iter()
@@ -196,12 +224,18 @@ pub(in super::super) fn update_particle_ipbc(
         .zip(kvecs.kz.iter())
         .zip(sk_ipbc.iter_mut())
     {
-        let (sox, cox) = (kx * old[0]).sin_cos();
-        let (soy, coy) = (ky * old[1]).sin_cos();
-        let (soz, coz) = (kz * old[2]).sin_cos();
-        let (snx, cnx) = (kx * new[0]).sin_cos();
-        let (sny, cny) = (ky * new[1]).sin_cos();
-        let (snz, cnz) = (kz * new[2]).sin_cos();
+        let (sox, cox) = (kx * old_f32[0]).sin_cos();
+        let (soy, coy) = (ky * old_f32[1]).sin_cos();
+        let (soz, coz) = (kz * old_f32[2]).sin_cos();
+        let (snx, cnx) = (kx * new_f32[0]).sin_cos();
+        let (sny, cny) = (ky * new_f32[1]).sin_cos();
+        let (snz, cnz) = (kz * new_f32[2]).sin_cos();
+        let (sox, cox) = (sox as f64, cox as f64);
+        let (soy, coy) = (soy as f64, coy as f64);
+        let (soz, coz) = (soz as f64, coz as f64);
+        let (snx, cnx) = (snx as f64, cnx as f64);
+        let (sny, cny) = (sny as f64, cny as f64);
+        let (snz, cnz) = (snz as f64, cnz as f64);
         sk[0] += charge * (cnx * cny * cnz - cox * coy * coz);
         sk[1] += charge * (cnx * cny * snz - cox * coy * soz);
         sk[2] += charge * (cnx * sny * cnz - cox * soy * coz);
@@ -221,6 +255,7 @@ pub(in super::super) fn force_pbc(
     sk_re: &[f64],
     sk_im: &[f64],
 ) -> [f64; 3] {
+    let pos_f32 = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
     let (mut fx, mut fy, mut fz) = (0.0, 0.0, 0.0);
     for (((((&kx, &ky), &kz), &ak), &s_re), &s_im) in kvecs
         .kx
@@ -231,11 +266,12 @@ pub(in super::super) fn force_pbc(
         .zip(sk_re.iter())
         .zip(sk_im.iter())
     {
-        let (sin_kr, cos_kr) = (kx * pos[0] + ky * pos[1] + kz * pos[2]).sin_cos();
-        let term = ak * (sin_kr * s_re - cos_kr * s_im);
-        fx += term * kx;
-        fy += term * ky;
-        fz += term * kz;
+        let (sin_kr, cos_kr) =
+            (kx * pos_f32[0] + ky * pos_f32[1] + kz * pos_f32[2]).sin_cos();
+        let term = ak as f64 * (sin_kr as f64 * s_re - cos_kr as f64 * s_im);
+        fx += term * kx as f64;
+        fy += term * ky as f64;
+        fz += term * kz as f64;
     }
     [fx, fy, fz]
 }
@@ -247,6 +283,7 @@ pub(in super::super) fn force_ipbc(
     pos: [f64; 3],
     sk_ipbc: &[[f64; 8]],
 ) -> [f64; 3] {
+    let pos_f32 = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
     let (mut fx, mut fy, mut fz) = (0.0, 0.0, 0.0);
     for ((((&kx, &ky), &kz), &ak), sk) in kvecs
         .kx
@@ -256,22 +293,26 @@ pub(in super::super) fn force_ipbc(
         .zip(kvecs.aks.iter())
         .zip(sk_ipbc.iter())
     {
-        let (sx, cx) = (kx * pos[0]).sin_cos();
-        let (sy, cy) = (ky * pos[1]).sin_cos();
-        let (sz, cz) = (kz * pos[2]).sin_cos();
-        let dfx = kx
-            * (-sx
-                * (sk[0] * cy * cz + sk[1] * cy * sz + sk[2] * sy * cz + sk[3] * sy * sz)
+        let (sx, cx) = (kx * pos_f32[0]).sin_cos();
+        let (sy, cy) = (ky * pos_f32[1]).sin_cos();
+        let (sz, cz) = (kz * pos_f32[2]).sin_cos();
+        let (sx, cx) = (sx as f64, cx as f64);
+        let (sy, cy) = (sy as f64, cy as f64);
+        let (sz, cz) = (sz as f64, cz as f64);
+        let (kxf, kyf, kzf) = (kx as f64, ky as f64, kz as f64);
+        let akf = ak as f64;
+        let dfx = kxf
+            * (-sx * (sk[0] * cy * cz + sk[1] * cy * sz + sk[2] * sy * cz + sk[3] * sy * sz)
                 + cx * (sk[4] * cy * cz + sk[5] * cy * sz + sk[6] * sy * cz + sk[7] * sy * sz));
-        let dfy = ky
+        let dfy = kyf
             * (cx * (-sy * (sk[0] * cz + sk[1] * sz) + cy * (sk[2] * cz + sk[3] * sz))
                 + sx * (-sy * (sk[4] * cz + sk[5] * sz) + cy * (sk[6] * cz + sk[7] * sz)));
-        let dfz = kz
+        let dfz = kzf
             * (cx * (cy * (-sz * sk[0] + cz * sk[1]) + sy * (-sz * sk[2] + cz * sk[3]))
                 + sx * (cy * (-sz * sk[4] + cz * sk[5]) + sy * (-sz * sk[6] + cz * sk[7])));
-        fx -= ak * dfx;
-        fy -= ak * dfy;
-        fz -= ak * dfz;
+        fx -= akf * dfx;
+        fy -= akf * dfy;
+        fz -= akf * dfz;
     }
     [fx, fy, fz]
 }

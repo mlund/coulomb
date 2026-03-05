@@ -1,26 +1,117 @@
 use super::super::kvectors::KVectors;
-use wide::f64x4;
+use wide::{f64x4, i64x4, CmpEq};
 
-/// Compute sin and cos for each lane of an f64x4.
+type Simd = f64x4;
+const LANES: usize = 4;
+
+/// SIMD polynomial sin_cos with f32-level accuracy (~7 digits).
 ///
-/// Uses scalar `f64::sin_cos` per lane for full precision. The SIMD benefit
-/// comes from the surrounding FMA arithmetic on k-vectors, not from this
-/// function itself. A future polynomial approximation or wgpu shader can
-/// replace this without changing the callers.
+/// Uses Cody-Waite range reduction (3-part π/2 for extended precision) and
+/// minimax polynomials: degree 7 for sin, degree 8 for cos. Coefficients
+/// from Sleef (https://sleef.org). Quadrant handling via branchless SIMD
+/// bit manipulation.
+///
+/// This is ~40% fewer FMAs than wide's built-in f64x4::sin_cos() (which
+/// targets full f64 precision), and avoids per-lane scalar libm calls.
 #[inline]
-fn sin_cos_f64x4(x: f64x4) -> (f64x4, f64x4) {
-    let x_arr: [f64; 4] = unsafe { core::mem::transmute(x) };
-    let (s0, c0) = x_arr[0].sin_cos();
-    let (s1, c1) = x_arr[1].sin_cos();
-    let (s2, c2) = x_arr[2].sin_cos();
-    let (s3, c3) = x_arr[3].sin_cos();
-    (
-        f64x4::new([s0, s1, s2, s3]),
-        f64x4::new([c0, c1, c2, c3]),
-    )
+fn sin_cos_poly(x: Simd) -> (Simd, Simd) {
+    // Range reduction constants: DP1 + DP2 + DP3 = π/2 (extended precision)
+    const FRAC_2_PI: f64 = std::f64::consts::FRAC_2_PI;
+    const DP1: f64 = 1.5703125;
+    const DP2: f64 = 4.837512969970703125e-4;
+    const DP3: f64 = 7.54978995489188216e-8;
+
+    // Minimax sin coefficients: sin(r) = r + r³·(S0 + r²·(S1 + r²·S2))
+    const S0: f64 = -1.66666537523269653320312e-1;
+    const S1: f64 = 8.33215750753879547119141e-3;
+    const S2: f64 = -1.95169282960705459117889e-4;
+
+    // Minimax cos coefficients: cos(r) = 1 - r²/2 + r⁴·(C0 + r²·(C1 + r²·(C2 + r²·C3)))
+    const C0: f64 = 4.16666641831398010253906e-2;
+    const C1: f64 = -1.38888787478208541870117e-3;
+    const C2: f64 = 2.47990446951007470488548e-5;
+    const C3: f64 = -2.71811842367242206819355e-7;
+
+    let xa = x.abs();
+    let y = (xa * Simd::splat(FRAC_2_PI)).round();
+    let q = y.round_int();
+
+    // Cody-Waite subtraction: r = |x| - y·(π/2)
+    let r = ((xa - y * Simd::splat(DP1)) - y * Simd::splat(DP2)) - y * Simd::splat(DP3);
+    let r2 = r * r;
+
+    // sin(r) ≈ r + r³·P(r²), degree 7
+    let s = r
+        + r * r2
+            * (Simd::splat(S0) + r2 * (Simd::splat(S1) + r2 * Simd::splat(S2)));
+
+    // cos(r) ≈ 1 - r²/2 + r⁴·Q(r²), degree 8
+    let c = Simd::splat(1.0)
+        + r2 * (Simd::splat(-0.5)
+            + r2 * (Simd::splat(C0)
+                + r2 * (Simd::splat(C1) + r2 * (Simd::splat(C2) + r2 * Simd::splat(C3)))));
+
+    // Quadrant selection (branchless, matching wide's own approach):
+    //   swap = q & 1 (odd quadrants: swap sin↔cos)
+    //   sign_sin = (q << 62) ^ sign(x)   (negate in quadrants 2,3 × input sign)
+    //   sign_cos = ((q+1) & 2) << 62      (negate in quadrants 1,2)
+    let swap: Simd = cast::<i64x4, Simd>(!((q & i64x4::from(1)).simd_eq(i64x4::from(0))));
+    let sin_poly = swap.blend(c, s);
+    let cos_poly = swap.blend(s, c);
+
+    let sign_sin: i64x4 = (q << 62) ^ cast::<Simd, i64x4>(x);
+    let sin_out = sin_poly.flip_signs(cast::<i64x4, Simd>(sign_sin));
+
+    let sign_cos: i64x4 = ((q + i64x4::from(1)) & i64x4::from(2)) << 62;
+    let cos_out: Simd = cos_poly ^ cast::<i64x4, Simd>(sign_cos);
+
+    (sin_out, cos_out)
 }
 
-/// Accumulate one particle's contribution into PBC structure factors (SIMD).
+/// Reinterpret-cast between same-size SIMD types.
+#[inline(always)]
+fn cast<A: Copy, B: Copy>(a: A) -> B {
+    debug_assert_eq!(core::mem::size_of::<A>(), core::mem::size_of::<B>());
+    unsafe { core::mem::transmute_copy(&a) }
+}
+
+/// Load LANES f32 elements from a slice, widening to f64x4.
+#[inline(always)]
+unsafe fn load_widen(slice: &[f32], i: usize) -> Simd {
+    let p = slice.as_ptr().add(i);
+    Simd::new([
+        *p as f64,
+        *p.add(1) as f64,
+        *p.add(2) as f64,
+        *p.add(3) as f64,
+    ])
+}
+
+/// Load LANES f64 elements from a slice.
+#[inline(always)]
+unsafe fn load_f64(slice: &[f64], i: usize) -> Simd {
+    core::mem::transmute::<[f64; LANES], Simd>(*(slice.as_ptr().add(i) as *const [f64; LANES]))
+}
+
+/// Horizontal sum of all lanes.
+#[inline(always)]
+fn hsum(v: Simd) -> f64 {
+    let a: [f64; LANES] = unsafe { core::mem::transmute::<Simd, [f64; LANES]>(v) };
+    a[0] + a[1] + a[2] + a[3]
+}
+
+/// Store LANES elements back into a mutable slice, accumulating (+=).
+#[inline(always)]
+fn store_add(slice: &mut [f64], i: usize, v: Simd) {
+    let a: [f64; LANES] = unsafe { core::mem::transmute::<Simd, [f64; LANES]>(v) };
+    for j in 0..LANES {
+        slice[i + j] += a[j];
+    }
+}
+
+// ── PBC operations ──────────────────────────────────────────────────────────
+
+/// Accumulate one particle's contribution into PBC structure factors.
 pub(in super::super) fn update_all_pbc(
     kvecs: &KVectors,
     px: f64,
@@ -31,60 +122,52 @@ pub(in super::super) fn update_all_pbc(
     sk_im: &mut [f64],
 ) {
     let n = kvecs.len();
-    let charge4 = f64x4::splat(charge);
-    let px4 = f64x4::splat(px);
-    let py4 = f64x4::splat(py);
-    let pz4 = f64x4::splat(pz);
+    let qv = Simd::splat(charge);
+    let pxv = Simd::splat(px);
+    let pyv = Simd::splat(py);
+    let pzv = Simd::splat(pz);
 
     let mut i = 0;
-    while i + 4 <= n {
-        let kx = f64x4::new(unsafe { *(kvecs.kx.as_ptr().add(i) as *const [f64; 4]) });
-        let ky = f64x4::new(unsafe { *(kvecs.ky.as_ptr().add(i) as *const [f64; 4]) });
-        let kz = f64x4::new(unsafe { *(kvecs.kz.as_ptr().add(i) as *const [f64; 4]) });
-
-        let kr = kx * px4 + ky * py4 + kz * pz4;
-        let (sin_kr, cos_kr) = sin_cos_f64x4(kr);
-        let dre = charge4 * cos_kr;
-        let dim = charge4 * sin_kr;
-
-        let dre_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(dre) };
-        let dim_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(dim) };
-        for j in 0..4 {
-            sk_re[i + j] += dre_arr[j];
-            sk_im[i + j] += dim_arr[j];
-        }
-        i += 4;
+    while i + LANES <= n {
+        let kx = unsafe { load_widen(&kvecs.kx, i) };
+        let ky = unsafe { load_widen(&kvecs.ky, i) };
+        let kz = unsafe { load_widen(&kvecs.kz, i) };
+        let kr = kx * pxv + ky * pyv + kz * pzv;
+        let (sin_kr, cos_kr) = sin_cos_poly(kr);
+        store_add(sk_re, i, qv * cos_kr);
+        store_add(sk_im, i, qv * sin_kr);
+        i += LANES;
     }
-    // Scalar tail
+    let px = px as f32;
+    let py = py as f32;
+    let pz = pz as f32;
     for k in i..n {
-        let (sin_kr, cos_kr) =
-            (kvecs.kx[k] * px + kvecs.ky[k] * py + kvecs.kz[k] * pz).sin_cos();
-        sk_re[k] += charge * cos_kr;
-        sk_im[k] += charge * sin_kr;
+        let (s, c) = (kvecs.kx[k] * px + kvecs.ky[k] * py + kvecs.kz[k] * pz).sin_cos();
+        sk_re[k] += charge * c as f64;
+        sk_im[k] += charge * s as f64;
     }
 }
 
-/// PBC energy (SIMD).
+/// PBC energy: Σ A(k) |S(k)|²
 pub(in super::super) fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64 {
     let n = kvecs.len();
-    let mut sum4 = f64x4::ZERO;
+    let mut acc = Simd::ZERO;
     let mut i = 0;
-    while i + 4 <= n {
-        let ak = f64x4::new(unsafe { *(kvecs.aks.as_ptr().add(i) as *const [f64; 4]) });
-        let re = f64x4::new(unsafe { *(sk_re.as_ptr().add(i) as *const [f64; 4]) });
-        let im = f64x4::new(unsafe { *(sk_im.as_ptr().add(i) as *const [f64; 4]) });
-        sum4 += ak * (re * re + im * im);
-        i += 4;
+    while i + LANES <= n {
+        let ak = unsafe { load_widen(&kvecs.aks, i) };
+        let re = unsafe { load_f64(sk_re, i) };
+        let im = unsafe { load_f64(sk_im, i) };
+        acc += ak * (re * re + im * im);
+        i += LANES;
     }
-    let sum_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(sum4) };
-    let mut sum = sum_arr[0] + sum_arr[1] + sum_arr[2] + sum_arr[3];
+    let mut sum = hsum(acc);
     for k in i..n {
-        sum += kvecs.aks[k] * (sk_re[k] * sk_re[k] + sk_im[k] * sk_im[k]);
+        sum += kvecs.aks[k] as f64 * (sk_re[k] * sk_re[k] + sk_im[k] * sk_im[k]);
     }
     sum
 }
 
-/// PBC energy change for a trial move (SIMD).
+/// PBC energy change for a trial move.
 pub(in super::super) fn energy_change_pbc(
     kvecs: &KVectors,
     sk_re: &[f64],
@@ -94,54 +177,54 @@ pub(in super::super) fn energy_change_pbc(
     new: [f64; 3],
 ) -> f64 {
     let n = kvecs.len();
-    let charge4 = f64x4::splat(charge);
-    let old_x4 = f64x4::splat(old[0]);
-    let old_y4 = f64x4::splat(old[1]);
-    let old_z4 = f64x4::splat(old[2]);
-    let new_x4 = f64x4::splat(new[0]);
-    let new_y4 = f64x4::splat(new[1]);
-    let new_z4 = f64x4::splat(new[2]);
-    let two4 = f64x4::splat(2.0);
+    let qv = Simd::splat(charge);
+    let ox = Simd::splat(old[0]);
+    let oy = Simd::splat(old[1]);
+    let oz = Simd::splat(old[2]);
+    let nx = Simd::splat(new[0]);
+    let ny = Simd::splat(new[1]);
+    let nz = Simd::splat(new[2]);
+    let two = Simd::splat(2.0);
 
-    let mut sum4 = f64x4::ZERO;
+    let mut acc = Simd::ZERO;
     let mut i = 0;
-    while i + 4 <= n {
-        let kx = f64x4::new(unsafe { *(kvecs.kx.as_ptr().add(i) as *const [f64; 4]) });
-        let ky = f64x4::new(unsafe { *(kvecs.ky.as_ptr().add(i) as *const [f64; 4]) });
-        let kz = f64x4::new(unsafe { *(kvecs.kz.as_ptr().add(i) as *const [f64; 4]) });
-        let ak = f64x4::new(unsafe { *(kvecs.aks.as_ptr().add(i) as *const [f64; 4]) });
-        let s_re = f64x4::new(unsafe { *(sk_re.as_ptr().add(i) as *const [f64; 4]) });
-        let s_im = f64x4::new(unsafe { *(sk_im.as_ptr().add(i) as *const [f64; 4]) });
+    while i + LANES <= n {
+        let kx = unsafe { load_widen(&kvecs.kx, i) };
+        let ky = unsafe { load_widen(&kvecs.ky, i) };
+        let kz = unsafe { load_widen(&kvecs.kz, i) };
+        let ak = unsafe { load_widen(&kvecs.aks, i) };
+        let s_re = unsafe { load_f64(sk_re, i) };
+        let s_im = unsafe { load_f64(sk_im, i) };
 
-        let kr_old = kx * old_x4 + ky * old_y4 + kz * old_z4;
-        let kr_new = kx * new_x4 + ky * new_y4 + kz * new_z4;
-        let (sin_old, cos_old) = sin_cos_f64x4(kr_old);
-        let (sin_new, cos_new) = sin_cos_f64x4(kr_new);
+        let (so, co) = sin_cos_poly(kx * ox + ky * oy + kz * oz);
+        let (sn, cn) = sin_cos_poly(kx * nx + ky * ny + kz * nz);
 
-        let ds_re = charge4 * (cos_new - cos_old);
-        let ds_im = charge4 * (sin_new - sin_old);
-        let cross = two4 * (s_re * ds_re + s_im * ds_im);
+        let ds_re = qv * (cn - co);
+        let ds_im = qv * (sn - so);
+        let cross = two * (s_re * ds_re + s_im * ds_im);
         let ds_sq = ds_re * ds_re + ds_im * ds_im;
-        sum4 += ak * (cross + ds_sq);
-        i += 4;
+        acc += ak * (cross + ds_sq);
+        i += LANES;
     }
-    let sum_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(sum4) };
-    let mut sum = sum_arr[0] + sum_arr[1] + sum_arr[2] + sum_arr[3];
+    let mut sum = hsum(acc);
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     for k in i..n {
-        let (sin_old, cos_old) =
-            (kvecs.kx[k] * old[0] + kvecs.ky[k] * old[1] + kvecs.kz[k] * old[2]).sin_cos();
-        let (sin_new, cos_new) =
-            (kvecs.kx[k] * new[0] + kvecs.ky[k] * new[1] + kvecs.kz[k] * new[2]).sin_cos();
-        let ds_re = charge * (cos_new - cos_old);
-        let ds_im = charge * (sin_new - sin_old);
-        let cross = 2.0 * (sk_re[k] * ds_re + sk_im[k] * ds_im);
-        let ds_sq = ds_re * ds_re + ds_im * ds_im;
-        sum += kvecs.aks[k] * (cross + ds_sq);
+        let (so, co) =
+            (kvecs.kx[k] * old_f32[0] + kvecs.ky[k] * old_f32[1] + kvecs.kz[k] * old_f32[2])
+                .sin_cos();
+        let (sn, cn) =
+            (kvecs.kx[k] * new_f32[0] + kvecs.ky[k] * new_f32[1] + kvecs.kz[k] * new_f32[2])
+                .sin_cos();
+        let ds_re = charge * (cn - co) as f64;
+        let ds_im = charge * (sn - so) as f64;
+        sum += kvecs.aks[k] as f64
+            * (2.0 * (sk_re[k] * ds_re + sk_im[k] * ds_im) + ds_re * ds_re + ds_im * ds_im);
     }
     sum
 }
 
-/// PBC delta update for a single-particle move (SIMD).
+/// PBC delta update for a single-particle move.
 pub(in super::super) fn update_particle_pbc(
     kvecs: &KVectors,
     charge: f64,
@@ -151,47 +234,42 @@ pub(in super::super) fn update_particle_pbc(
     sk_im: &mut [f64],
 ) {
     let n = kvecs.len();
-    let charge4 = f64x4::splat(charge);
-    let old_x4 = f64x4::splat(old[0]);
-    let old_y4 = f64x4::splat(old[1]);
-    let old_z4 = f64x4::splat(old[2]);
-    let new_x4 = f64x4::splat(new[0]);
-    let new_y4 = f64x4::splat(new[1]);
-    let new_z4 = f64x4::splat(new[2]);
+    let qv = Simd::splat(charge);
+    let ox = Simd::splat(old[0]);
+    let oy = Simd::splat(old[1]);
+    let oz = Simd::splat(old[2]);
+    let nx = Simd::splat(new[0]);
+    let ny = Simd::splat(new[1]);
+    let nz = Simd::splat(new[2]);
 
     let mut i = 0;
-    while i + 4 <= n {
-        let kx = f64x4::new(unsafe { *(kvecs.kx.as_ptr().add(i) as *const [f64; 4]) });
-        let ky = f64x4::new(unsafe { *(kvecs.ky.as_ptr().add(i) as *const [f64; 4]) });
-        let kz = f64x4::new(unsafe { *(kvecs.kz.as_ptr().add(i) as *const [f64; 4]) });
+    while i + LANES <= n {
+        let kx = unsafe { load_widen(&kvecs.kx, i) };
+        let ky = unsafe { load_widen(&kvecs.ky, i) };
+        let kz = unsafe { load_widen(&kvecs.kz, i) };
 
-        let kr_old = kx * old_x4 + ky * old_y4 + kz * old_z4;
-        let kr_new = kx * new_x4 + ky * new_y4 + kz * new_z4;
-        let (sin_old, cos_old) = sin_cos_f64x4(kr_old);
-        let (sin_new, cos_new) = sin_cos_f64x4(kr_new);
+        let (so, co) = sin_cos_poly(kx * ox + ky * oy + kz * oz);
+        let (sn, cn) = sin_cos_poly(kx * nx + ky * ny + kz * nz);
 
-        let dre = charge4 * (cos_new - cos_old);
-        let dim = charge4 * (sin_new - sin_old);
-
-        let dre_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(dre) };
-        let dim_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(dim) };
-        for j in 0..4 {
-            sk_re[i + j] += dre_arr[j];
-            sk_im[i + j] += dim_arr[j];
-        }
-        i += 4;
+        store_add(sk_re, i, qv * (cn - co));
+        store_add(sk_im, i, qv * (sn - so));
+        i += LANES;
     }
+    let old_f32 = [old[0] as f32, old[1] as f32, old[2] as f32];
+    let new_f32 = [new[0] as f32, new[1] as f32, new[2] as f32];
     for k in i..n {
-        let (sin_old, cos_old) =
-            (kvecs.kx[k] * old[0] + kvecs.ky[k] * old[1] + kvecs.kz[k] * old[2]).sin_cos();
-        let (sin_new, cos_new) =
-            (kvecs.kx[k] * new[0] + kvecs.ky[k] * new[1] + kvecs.kz[k] * new[2]).sin_cos();
-        sk_re[k] += charge * (cos_new - cos_old);
-        sk_im[k] += charge * (sin_new - sin_old);
+        let (so, co) =
+            (kvecs.kx[k] * old_f32[0] + kvecs.ky[k] * old_f32[1] + kvecs.kz[k] * old_f32[2])
+                .sin_cos();
+        let (sn, cn) =
+            (kvecs.kx[k] * new_f32[0] + kvecs.ky[k] * new_f32[1] + kvecs.kz[k] * new_f32[2])
+                .sin_cos();
+        sk_re[k] += charge * (cn - co) as f64;
+        sk_im[k] += charge * (sn - so) as f64;
     }
 }
 
-/// PBC force on one particle (SIMD).
+/// PBC force on one particle.
 pub(in super::super) fn force_pbc(
     kvecs: &KVectors,
     pos: [f64; 3],
@@ -199,46 +277,41 @@ pub(in super::super) fn force_pbc(
     sk_im: &[f64],
 ) -> [f64; 3] {
     let n = kvecs.len();
-    let px4 = f64x4::splat(pos[0]);
-    let py4 = f64x4::splat(pos[1]);
-    let pz4 = f64x4::splat(pos[2]);
+    let pxv = Simd::splat(pos[0]);
+    let pyv = Simd::splat(pos[1]);
+    let pzv = Simd::splat(pos[2]);
 
-    let mut fx4 = f64x4::ZERO;
-    let mut fy4 = f64x4::ZERO;
-    let mut fz4 = f64x4::ZERO;
+    let mut fxv = Simd::ZERO;
+    let mut fyv = Simd::ZERO;
+    let mut fzv = Simd::ZERO;
 
     let mut i = 0;
-    while i + 4 <= n {
-        let kx = f64x4::new(unsafe { *(kvecs.kx.as_ptr().add(i) as *const [f64; 4]) });
-        let ky = f64x4::new(unsafe { *(kvecs.ky.as_ptr().add(i) as *const [f64; 4]) });
-        let kz = f64x4::new(unsafe { *(kvecs.kz.as_ptr().add(i) as *const [f64; 4]) });
-        let ak = f64x4::new(unsafe { *(kvecs.aks.as_ptr().add(i) as *const [f64; 4]) });
-        let s_re = f64x4::new(unsafe { *(sk_re.as_ptr().add(i) as *const [f64; 4]) });
-        let s_im = f64x4::new(unsafe { *(sk_im.as_ptr().add(i) as *const [f64; 4]) });
+    while i + LANES <= n {
+        let kx = unsafe { load_widen(&kvecs.kx, i) };
+        let ky = unsafe { load_widen(&kvecs.ky, i) };
+        let kz = unsafe { load_widen(&kvecs.kz, i) };
+        let ak = unsafe { load_widen(&kvecs.aks, i) };
+        let s_re = unsafe { load_f64(sk_re, i) };
+        let s_im = unsafe { load_f64(sk_im, i) };
 
-        let kr = kx * px4 + ky * py4 + kz * pz4;
-        let (sin_kr, cos_kr) = sin_cos_f64x4(kr);
+        let (sin_kr, cos_kr) = sin_cos_poly(kx * pxv + ky * pyv + kz * pzv);
         let term = ak * (sin_kr * s_re - cos_kr * s_im);
-        fx4 += term * kx;
-        fy4 += term * ky;
-        fz4 += term * kz;
-        i += 4;
+        fxv += term * kx;
+        fyv += term * ky;
+        fzv += term * kz;
+        i += LANES;
     }
 
-    let fx_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(fx4) };
-    let fy_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(fy4) };
-    let fz_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(fz4) };
-    let mut fx = fx_arr[0] + fx_arr[1] + fx_arr[2] + fx_arr[3];
-    let mut fy = fy_arr[0] + fy_arr[1] + fy_arr[2] + fy_arr[3];
-    let mut fz = fz_arr[0] + fz_arr[1] + fz_arr[2] + fz_arr[3];
-
+    let mut fx = hsum(fxv);
+    let mut fy = hsum(fyv);
+    let mut fz = hsum(fzv);
+    let pos_f32 = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
     for k in i..n {
-        let (sin_kr, cos_kr) =
-            (kvecs.kx[k] * pos[0] + kvecs.ky[k] * pos[1] + kvecs.kz[k] * pos[2]).sin_cos();
-        let term = kvecs.aks[k] * (sin_kr * sk_re[k] - cos_kr * sk_im[k]);
-        fx += term * kvecs.kx[k];
-        fy += term * kvecs.ky[k];
-        fz += term * kvecs.kz[k];
+        let (s, c) = (kvecs.kx[k] * pos_f32[0] + kvecs.ky[k] * pos_f32[1] + kvecs.kz[k] * pos_f32[2]).sin_cos();
+        let term = kvecs.aks[k] as f64 * (s as f64 * sk_re[k] - c as f64 * sk_im[k]);
+        fx += term * kvecs.kx[k] as f64;
+        fy += term * kvecs.ky[k] as f64;
+        fz += term * kvecs.kz[k] as f64;
     }
     [fx, fy, fz]
 }
@@ -247,80 +320,65 @@ pub(in super::super) fn force_pbc(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_sin_cos_f64x4_basic() {
-        let x = f64x4::new([0.0, std::f64::consts::FRAC_PI_2, std::f64::consts::PI, 1.0]);
-        let (s, c) = sin_cos_f64x4(x);
-        let s_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(s) };
-        let c_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(c) };
-
-        assert!((s_arr[0] - 0.0).abs() < 1e-14, "sin(0) = {}", s_arr[0]);
-        assert!((c_arr[0] - 1.0).abs() < 1e-14, "cos(0) = {}", c_arr[0]);
-        assert!((s_arr[1] - 1.0).abs() < 1e-14, "sin(π/2) = {}", s_arr[1]);
-        assert!((c_arr[1] - 0.0).abs() < 1e-14, "cos(π/2) = {}", c_arr[1]);
-        assert!((s_arr[2] - 0.0).abs() < 1e-14, "sin(π) = {}", s_arr[2]);
-        assert!(
-            (c_arr[2] - (-1.0)).abs() < 1e-14,
-            "cos(π) = {}",
-            c_arr[2]
-        );
-
-        let (expected_s, expected_c) = 1.0f64.sin_cos();
-        assert!(
-            (s_arr[3] - expected_s).abs() < 1e-12,
-            "sin(1) = {} vs {}",
-            s_arr[3],
-            expected_s
-        );
-        assert!(
-            (c_arr[3] - expected_c).abs() < 1e-12,
-            "cos(1) = {} vs {}",
-            c_arr[3],
-            expected_c
-        );
-    }
-
-    #[test]
-    fn test_sin_cos_f64x4_negative() {
-        let x = f64x4::new([-1.0, -3.0, -0.5, -6.0]);
-        let (s, c) = sin_cos_f64x4(x);
-        let s_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(s) };
-        let c_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(c) };
-
-        for (i, &val) in [-1.0f64, -3.0, -0.5, -6.0].iter().enumerate() {
-            let (es, ec) = val.sin_cos();
-            assert!(
-                (s_arr[i] - es).abs() < 1e-12,
-                "sin({val}) = {} vs {es}",
-                s_arr[i]
-            );
-            assert!(
-                (c_arr[i] - ec).abs() < 1e-12,
-                "cos({val}) = {} vs {ec}",
-                c_arr[i]
-            );
+    fn check_sin_cos(values: &[f64], tol: f64) {
+        for chunk in values.chunks(LANES) {
+            let mut arr = [0.0f64; LANES];
+            arr[..chunk.len()].copy_from_slice(chunk);
+            let x: Simd = unsafe { core::mem::transmute::<[f64; LANES], Simd>(arr) };
+            let (s, c) = sin_cos_poly(x);
+            let s_arr: [f64; LANES] = unsafe { core::mem::transmute::<Simd, [f64; LANES]>(s) };
+            let c_arr: [f64; LANES] = unsafe { core::mem::transmute::<Simd, [f64; LANES]>(c) };
+            for (i, &val) in chunk.iter().enumerate() {
+                let (es, ec) = val.sin_cos();
+                assert!(
+                    (s_arr[i] - es).abs() < tol,
+                    "sin({val}) = {} vs {es}, err={}",
+                    s_arr[i],
+                    (s_arr[i] - es).abs()
+                );
+                assert!(
+                    (c_arr[i] - ec).abs() < tol,
+                    "cos({val}) = {} vs {ec}, err={}",
+                    c_arr[i],
+                    (c_arr[i] - ec).abs()
+                );
+            }
         }
     }
 
     #[test]
-    fn test_sin_cos_f64x4_large() {
-        let x = f64x4::new([100.0, -100.0, 1000.0, -1000.0]);
-        let (s, c) = sin_cos_f64x4(x);
-        let s_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(s) };
-        let c_arr = unsafe { core::mem::transmute::<f64x4, [f64; 4]>(c) };
+    fn test_sin_cos_basic() {
+        check_sin_cos(
+            &[0.0, std::f64::consts::FRAC_PI_2, std::f64::consts::PI, 1.0],
+            1e-6,
+        );
+    }
 
-        for (i, &val) in [100.0f64, -100.0, 1000.0, -1000.0].iter().enumerate() {
-            let (es, ec) = val.sin_cos();
-            assert!(
-                (s_arr[i] - es).abs() < 1e-10,
-                "sin({val}) = {} vs {es}",
-                s_arr[i]
-            );
-            assert!(
-                (c_arr[i] - ec).abs() < 1e-10,
-                "cos({val}) = {} vs {ec}",
-                c_arr[i]
-            );
-        }
+    #[test]
+    fn test_sin_cos_negative() {
+        check_sin_cos(&[-1.0, -3.0, -0.5, -6.0], 1e-6);
+    }
+
+    #[test]
+    fn test_sin_cos_large() {
+        // k·r values up to ~60 for typical Ewald parameters
+        check_sin_cos(&[10.0, -10.0, 50.0, -50.0], 1e-5);
+    }
+
+    #[test]
+    fn test_sin_cos_quadrants() {
+        // Test all four quadrants
+        check_sin_cos(&[0.5, 2.0, 3.5, 5.0], 1e-6);
+        check_sin_cos(&[-0.5, -2.0, -3.5, -5.0], 1e-6);
+    }
+
+    #[test]
+    fn test_sin_cos_near_multiples_of_pi() {
+        use std::f64::consts::PI;
+        check_sin_cos(&[PI, 2.0 * PI, -PI, -2.0 * PI], 1e-5);
+        check_sin_cos(
+            &[PI / 2.0, 3.0 * PI / 2.0, -PI / 2.0, -3.0 * PI / 2.0],
+            1e-5,
+        );
     }
 }

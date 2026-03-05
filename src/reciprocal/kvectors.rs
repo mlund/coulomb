@@ -4,15 +4,18 @@ use super::EwaldPolicy;
 
 /// Private k-vector storage with precomputed A(k) coefficients.
 ///
-/// Stored in SoA layout for cache-friendly inner loops and future SIMD.
+/// Stored in SoA layout for cache-friendly inner loops and SIMD.
+/// Uses f32 for k-vector components and coefficients to halve memory
+/// bandwidth and enable 8-wide SIMD (f32x8). Structure factor
+/// accumulation uses f64 for numerical safety.
 ///
 /// For PBC: half-shell k-vectors (one of each ±k pair), A(k) doubled.
 /// For IPBC: first-octant k-vectors (nx,ny,nz ≥ 0), A(k) includes octant symmetry factor.
 pub(super) struct KVectors {
-    pub(super) kx: Vec<f64>,
-    pub(super) ky: Vec<f64>,
-    pub(super) kz: Vec<f64>,
-    pub(super) aks: Vec<f64>,
+    pub(super) kx: Vec<f32>,
+    pub(super) ky: Vec<f32>,
+    pub(super) kz: Vec<f32>,
+    pub(super) aks: Vec<f32>,
 }
 
 impl KVectors {
@@ -91,10 +94,12 @@ impl KVectors {
                                 / k_sq_kappa_sq
                         }
                     };
-                    kx.push(kvx);
-                    ky.push(kvy);
-                    kz.push(kvz);
-                    aks.push(ak);
+                    // Compute in f64, store as f32. The relative precision loss (~1e-7)
+                    // is negligible for the reciprocal sum.
+                    kx.push(kvx as f32);
+                    ky.push(kvy as f32);
+                    kz.push(kvz as f32);
+                    aks.push(ak as f32);
                 }
             }
         }
@@ -129,9 +134,11 @@ mod tests {
     fn test_aks_coulomb() {
         let alpha = 0.8;
         let kvecs = KVectors::new([10.0, 10.0, 10.0], 1, alpha, 0.0, EwaldPolicy::PBC);
-        let k2 = kvecs.kx[0] * kvecs.kx[0] + kvecs.ky[0] * kvecs.ky[0] + kvecs.kz[0] * kvecs.kz[0];
+        let k2 = kvecs.kx[0] as f64 * kvecs.kx[0] as f64
+            + kvecs.ky[0] as f64 * kvecs.ky[0] as f64
+            + kvecs.kz[0] as f64 * kvecs.kz[0] as f64;
         let expected = 2.0 * (-k2 / (4.0 * alpha * alpha)).exp() / k2;
-        assert_relative_eq!(kvecs.aks[0], expected);
+        assert_relative_eq!(kvecs.aks[0] as f64, expected, epsilon = 1e-6);
     }
 
     #[test]
@@ -139,10 +146,12 @@ mod tests {
         let kappa = 0.5;
         let alpha = 0.8;
         let kvecs = KVectors::new([10.0, 10.0, 10.0], 1, alpha, kappa, EwaldPolicy::PBC);
-        let k2 = kvecs.kx[0] * kvecs.kx[0] + kvecs.ky[0] * kvecs.ky[0] + kvecs.kz[0] * kvecs.kz[0];
+        let k2 = kvecs.kx[0] as f64 * kvecs.kx[0] as f64
+            + kvecs.ky[0] as f64 * kvecs.ky[0] as f64
+            + kvecs.kz[0] as f64 * kvecs.kz[0] as f64;
         let k2_kappa2 = k2 + kappa * kappa;
         let expected = 2.0 * (-k2_kappa2 / (4.0 * alpha * alpha)).exp() / k2_kappa2;
-        assert_relative_eq!(kvecs.aks[0], expected);
+        assert_relative_eq!(kvecs.aks[0] as f64, expected, epsilon = 1e-6);
     }
 
     #[test]

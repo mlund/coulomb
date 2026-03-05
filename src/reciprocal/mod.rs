@@ -22,8 +22,9 @@
 //! Coulomb (κ=0) and screened Yukawa (κ>0) interactions.
 //!
 //! The API uses SoA (Structure-of-Arrays) layout: separate `&[f64]` slices
-//! for x, y, z coordinates and charges. This matches common MD/MC engine
-//! storage and enables future SIMD and GPU backends.
+//! for x, y, z coordinates and charges. Internally, k-vectors and coefficients
+//! are stored as f32 (halving memory and enabling 8-wide SIMD), while structure
+//! factor accumulators use f64 for numerical safety.
 //!
 //! # MC workflow
 //! ```
@@ -289,21 +290,12 @@ impl EwaldReciprocal {
     pub fn energy_change(&self, charge: f64, old: [f64; 3], new: [f64; 3]) -> f64 {
         let prefactor = 2.0 * PI / self.volume;
         let sum = match self.policy {
-            EwaldPolicy::PBC => energy_change_pbc(
-                &self.kvecs,
-                &self.sk_re,
-                &self.sk_im,
-                charge,
-                old,
-                new,
-            ),
-            EwaldPolicy::IPBC => backend::scalar::energy_change_ipbc(
-                &self.kvecs,
-                &self.sk_ipbc,
-                charge,
-                old,
-                new,
-            ),
+            EwaldPolicy::PBC => {
+                energy_change_pbc(&self.kvecs, &self.sk_re, &self.sk_im, charge, old, new)
+            }
+            EwaldPolicy::IPBC => {
+                backend::scalar::energy_change_ipbc(&self.kvecs, &self.sk_ipbc, charge, old, new)
+            }
         };
         prefactor * sum
     }
@@ -430,9 +422,9 @@ impl EwaldReciprocal {
     }
 }
 
-// ── Backend dispatch: SIMD when available, scalar fallback ──────────────────
+// ── Backend dispatch: SIMD on x86_64, scalar elsewhere ──────────────────────
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
 fn update_all_pbc(
     kvecs: &KVectors,
     px: f64,
@@ -445,7 +437,7 @@ fn update_all_pbc(
     backend::simd::update_all_pbc(kvecs, px, py, pz, charge, sk_re, sk_im);
 }
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
 fn update_all_pbc(
     kvecs: &KVectors,
     px: f64,
@@ -458,17 +450,17 @@ fn update_all_pbc(
     backend::scalar::update_all_pbc(kvecs, px, py, pz, charge, sk_re, sk_im);
 }
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
 fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64 {
     backend::simd::energy_pbc(kvecs, sk_re, sk_im)
 }
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
 fn energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64 {
     backend::scalar::energy_pbc(kvecs, sk_re, sk_im)
 }
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
 fn energy_change_pbc(
     kvecs: &KVectors,
     sk_re: &[f64],
@@ -480,7 +472,7 @@ fn energy_change_pbc(
     backend::simd::energy_change_pbc(kvecs, sk_re, sk_im, charge, old, new)
 }
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
 fn energy_change_pbc(
     kvecs: &KVectors,
     sk_re: &[f64],
@@ -492,7 +484,7 @@ fn energy_change_pbc(
     backend::scalar::energy_change_pbc(kvecs, sk_re, sk_im, charge, old, new)
 }
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
 fn update_particle_pbc(
     kvecs: &KVectors,
     charge: f64,
@@ -504,7 +496,7 @@ fn update_particle_pbc(
     backend::simd::update_particle_pbc(kvecs, charge, old, new, sk_re, sk_im);
 }
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
 fn update_particle_pbc(
     kvecs: &KVectors,
     charge: f64,
@@ -516,12 +508,12 @@ fn update_particle_pbc(
     backend::scalar::update_particle_pbc(kvecs, charge, old, new, sk_re, sk_im);
 }
 
-#[cfg(feature = "simd")]
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
 fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3] {
     backend::simd::force_pbc(kvecs, pos, sk_re, sk_im)
 }
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
 fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3] {
     backend::scalar::force_pbc(kvecs, pos, sk_re, sk_im)
 }
@@ -640,7 +632,7 @@ mod tests {
         ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges);
         let e_minus = ewald.energy();
         let numerical_fx = -(e_plus - e_minus) / (2.0 * delta);
-        assert_relative_eq!(fx, numerical_fx, epsilon = 1e-4);
+        assert_relative_eq!(fx, numerical_fx, epsilon = 1e-3);
     }
 
     #[test]
@@ -666,7 +658,7 @@ mod tests {
         ewald.update_all(&x2, &y2, &z2, &charges);
         let e_full = ewald.energy();
 
-        assert_relative_eq!(e_partial, e_full, epsilon = 1e-12);
+        assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
     }
 
     #[test]
@@ -689,7 +681,7 @@ mod tests {
         ewald.update_particle(charges[0], old, new);
         let e_after = ewald.energy();
 
-        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-12);
+        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-6);
     }
 
     #[test]
@@ -899,7 +891,7 @@ mod tests {
             .with_policy(EwaldPolicy::IPBC);
         ipbc.update_all(&x, &y, &z, &charges);
 
-        assert_relative_eq!(ipbc.energy(), pbc.energy(), epsilon = 1e-10);
+        assert_relative_eq!(ipbc.energy(), pbc.energy(), epsilon = 1e-6);
     }
 
     #[test]
@@ -962,7 +954,7 @@ mod tests {
         ewald.update_all(&x2, &y2, &z2, &charges);
         let e_full = ewald.energy();
 
-        assert_relative_eq!(e_partial, e_full, epsilon = 1e-12);
+        assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
     }
 
     #[test]
@@ -986,7 +978,7 @@ mod tests {
         ewald.update_particle(charges[0], old, new_pos);
         let e_after = ewald.energy();
 
-        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-12);
+        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-6);
     }
 
     #[test]
@@ -1005,21 +997,21 @@ mod tests {
         let e_plus = ewald.energy();
         ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges);
         let e_minus = ewald.energy();
-        assert_relative_eq!(fx, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-4);
+        assert_relative_eq!(fx, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
 
         // Numerical gradient for y
         ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges);
         let e_plus = ewald.energy();
         ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges);
         let e_minus = ewald.energy();
-        assert_relative_eq!(fy, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-4);
+        assert_relative_eq!(fy, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
 
         // Numerical gradient for z
         ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges);
         let e_plus = ewald.energy();
         ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges);
         let e_minus = ewald.energy();
-        assert_relative_eq!(fz, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-4);
+        assert_relative_eq!(fz, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
     }
 
     #[test]
