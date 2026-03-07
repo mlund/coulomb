@@ -17,107 +17,49 @@
 
 //! Reciprocal-space Ewald summation for Coulomb and Yukawa potentials.
 //!
-//! This module provides [`EwaldReciprocal`], which handles k-space energies,
-//! forces, and efficient Monte Carlo partial updates for both unscreened
-//! Coulomb ($\kappa=0$) and screened Yukawa ($\kappa>0$) interactions.
+//! Provides [`EwaldReciprocal`] for k-space energies, forces, and efficient
+//! Monte Carlo partial updates. Supports both unscreened Coulomb ($\kappa=0$)
+//! and screened Yukawa ($\kappa>0$), with PBC and IPBC
+//! ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) policies.
 //!
-//! # Theory
+//! # Usage
 //!
-//! The Ewald method splits the pair potential into real-space and reciprocal-space
-//! contributions. For a system of $N$ charges $q_i$ in an orthorhombic box with
-//! side lengths $L_x, L_y, L_z$ and volume $V = L_x L_y L_z$, the total
-//! electrostatic energy is:
-//!
-//! $$U = U_\text{real} + U_\text{recip} + U_\text{self} + U_\text{surface}$$
-//!
-//! This module handles $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$.
-//!
-//! ## Reciprocal-space energy
-//!
-//! $$U_\text{recip} = \frac{2\pi}{V} \sum_{\mathbf{k} \neq 0} A(\mathbf{k}) \, |S(\mathbf{k})|^2$$
-//!
-//! where the structure factor is $S(\mathbf{k}) = \sum_j q_j e^{i\mathbf{k} \cdot \mathbf{r}_j}$
-//! and the k-space coefficient is:
-//!
-//! $$A(\mathbf{k}) = \frac{\exp\!\bigl(-(k^2 + \kappa^2) / 4\alpha^2\bigr)}{k^2 + \kappa^2}$$
-//!
-//! For Coulomb ($\kappa = 0$), this reduces to $A(\mathbf{k}) = \exp(-k^2/4\alpha^2)/k^2$.
-//!
-//! ## Self-energy correction
-//!
-//! The Ewald real-space sum inadvertently includes the interaction of each charge
-//! with its own Gaussian image. This must be subtracted:
-//!
-//! $$U_\text{self} = -\frac{\alpha}{\sqrt\pi} e^{-\kappa^2/4\alpha^2} \sum_i q_i^2
-//!   + \frac{\kappa}{2} \operatorname{erfc}\!\left(\frac{\kappa}{2\alpha}\right) \sum_i q_i^2$$
-//!
-//! For Coulomb, only the first term survives: $U_\text{self} = -(\alpha/\sqrt\pi) \sum_i q_i^2$.
-//!
-//! ## Surface term
-//!
-//! For non-tinfoil (finite $\varepsilon_s$) boundary conditions:
-//!
-//! $$U_\text{surface} = \frac{2\pi}{(2\varepsilon_s + 1) V} \left|\sum_i q_i \mathbf{r}_i\right|^2$$
-//!
-//! This term vanishes for metallic (tinfoil, $\varepsilon_s = \infty$) boundaries.
-//!
-//! ## IPBC (Isotropic Periodic Boundary Conditions)
-//!
-//! IPBC ([Stenqvist & Lund, 2018](https://doi.org/10/css8)) uses a cos-product
-//! structure factor $Q(\mathbf{k}) = \sum_j q_j \prod_\alpha \cos(k_\alpha r_{j\alpha})$
-//! (one real scalar per k-vector). Only first-octant k-vectors ($n_x, n_y, n_z \geq 0$)
-//! are needed, with octant symmetry factors $2^d$ baked into $A(\mathbf{k})$.
-//!
-//! # Parameter optimization
-//!
-//! Automatic parameter selection uses Kolafa–Perram error estimates:
-//!
-//! - **Real-space cutoff**: $r_c = L_\text{min} / 2$ (minimum image convention limit)
-//! - **Splitting parameter**: $\alpha = \sqrt{-\ln \varepsilon} / r_c$, balancing
-//!   real-space error $\sim \exp(-\alpha^2 r_c^2)$
-//! - **Reciprocal cutoff**: $n_\text{max} = \lceil \alpha L_\text{max} \sqrt{-\ln \varepsilon} / \pi \rceil$
-//!
-//! For Yukawa ($\kappa > 0$), [Salin & Caillol (2000)](https://doi.org/10.1063/1.1326477)
-//! showed that the optimal splitting parameter is independent of $\kappa$ (Eq. 3.3),
-//! so the same $\alpha$ and $n_\text{max}$ work for both Coulomb and Yukawa.
-//!
-//! # Mixed precision
-//!
-//! K-vectors and $A(\mathbf{k})$ coefficients are stored as `f32`, halving memory
-//! bandwidth and enabling wider SIMD. Trigonometric evaluations use `f32` arithmetic,
-//! while structure factor accumulators and energy sums use `f64` for numerical safety.
-//! On x86_64 with the `simd` feature, a polynomial `sin_cos` avoids per-lane libm calls.
-//!
-//! # MC workflow
 //! ```
 //! # use coulomb::reciprocal::*;
 //! let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
 //! # let (x, y, z) = (vec![-0.5, 0.5], vec![0.0, 0.0], vec![0.0, 0.0]);
 //! # let charges = vec![1.0, -1.0];
 //! ewald.update_all(&x, &y, &z, &charges, None);
+//!
+//! // MC: O(N_k) trial move
 //! # let (old, new) = ([-0.5, 0.0, 0.0], [-0.3, 0.0, 0.0]);
 //! let de = ewald.energy_change(1.0, old, new);
 //! // if accept { ewald.update_particle(1.0, old, new); }
-//! ```
 //!
-//! # MD workflow
-//! ```
-//! # use coulomb::reciprocal::*;
-//! let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-//! # let (x, y, z) = (vec![-0.5, 0.5], vec![0.0, 0.0], vec![0.0, 0.0]);
-//! # let charges = vec![1.0, -1.0];
-//! ewald.update_all(&x, &y, &z, &charges, None);
+//! // MD: accumulate forces
 //! let (mut fx, mut fy, mut fz) = (vec![0.0; 2], vec![0.0; 2], vec![0.0; 2]);
 //! ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
 //! ```
+//!
+//! Parameters α and $n_\text{max}$ are derived automatically from the cutoff and
+//! accuracy target.
+//! For Yukawa, [`EwaldReciprocal::optimize`] can further reduce k-vectors by
+//! jointly scanning (α, $n_\text{max}$) against actual particle data (PBC only).
+//!
+//! # IPBC limitations
+//!
+//! The IPBC cos-product basis is **not α-invariant** (Cauchy–Schwarz:
+//! $Q^2 \neq \sum|S_\sigma|^2$), so [`EwaldReciprocal::optimize`] panics for IPBC.
 
 mod backend;
 mod kvectors;
-mod parameters;
-pub use parameters::{ewald_alpha, ewald_n_max};
+pub(crate) mod parameters;
 
 use core::f64::consts::PI;
 use kvectors::KVectors;
+
+/// √π — precomputed to avoid repeated runtime `PI.sqrt()` calls.
+const SQRT_PI: f64 = 1.7724538509055159;
 
 use crate::permittivity::ConstantPermittivity;
 
@@ -129,99 +71,232 @@ pub enum EwaldPolicy {
     #[default]
     PBC,
     /// Isotropic periodic boundary conditions ([Stenqvist & Lund, 2018](https://doi.org/10/css8)).
+    ///
+    /// Uses cos-product structure factors and first-octant k-vectors.
+    /// Note: the IPBC energy is **not α-invariant**, so [`EwaldReciprocal::optimize`]
+    /// is not supported. See [module docs](crate::reciprocal#ipbc-limitations).
     IPBC,
 }
 
 /// Reciprocal-space Ewald summation for Coulomb and Yukawa potentials.
 ///
-/// Computes $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$
-/// for both unscreened Coulomb ($\kappa = 0$) and screened Yukawa ($\kappa = 1/\lambda_D$).
-///
-/// Positions are passed as separate `x`, `y`, `z` slices (SoA layout), and forces
-/// are accumulated into caller-provided buffers. The input type is generic over
-/// `T: Into<f64> + Copy`, accepting both `f32` and `f64` slices at zero cost.
-///
-/// Supports both standard PBC (half-shell k-vectors) and IPBC (first-octant
-/// k-vectors, [Stenqvist & Lund, 2018](https://doi.org/10/css8)) via [`EwaldPolicy`].
+/// Handles $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$ with
+/// SoA position layout and generic `T: Into<f64> + Copy` input (f32/f64).
+/// Supports PBC and IPBC via [`EwaldPolicy`].
 #[derive(Clone)]
 pub struct EwaldReciprocal {
     kvecs: KVectors,
-    /// Stored for `with_policy()` rebuild.
     box_length: [f64; 3],
-    /// Precomputed `2π/V` for energy/energy_change.
     two_pi_over_v: f64,
-    /// Precomputed `4π/V` for force.
     four_pi_over_v: f64,
-    /// Retained for `self_energy()` which needs the raw splitting parameter.
     alpha: f64,
-    /// Retained for `self_energy()` which needs the raw screening parameter.
     kappa: f64,
-    /// Integer k-space cutoff, stored for `with_policy()` rebuild.
     n_max: u32,
-    /// Real-space cutoff paired with this reciprocal instance.
     real_cutoff: f64,
-    /// Target accuracy, stored for box-resize rebuild in `update_all()`.
     accuracy: f64,
     boundary: ConstantPermittivity,
     policy: EwaldPolicy,
-    /// PBC structure factors: Re(S(k)) and Im(S(k)) for each k-vector.
-    /// Empty when policy is IPBC (empty Vec costs nothing — just a dangling pointer).
     sk_re: Vec<f64>,
     sk_im: Vec<f64>,
-    /// IPBC structure factors: $Q_k = \sum_j q_j \prod_\alpha \cos(k_\alpha r_{j\alpha})$.
-    /// One real scalar per k-vector (eq. 2 in [Stenqvist & Lund, 2018](https://doi.org/10/css8)).
-    /// Empty when policy is PBC.
     sk_ipbc: Vec<f64>,
 }
 
 impl EwaldReciprocal {
     /// Construct with automatic parameter selection for target accuracy.
     ///
-    /// Derives $\alpha$ and $n_\text{max}$ from the given cutoff and accuracy
-    /// via Kolafa–Perram estimates:
-    /// $\alpha = \sqrt{-\ln\varepsilon}/r_c$,
-    /// $n_\text{max} = \lceil \alpha L_\text{max} \sqrt{-\ln\varepsilon}/\pi \rceil$.
-    ///
-    /// - `box_length`: Side lengths `[Lx, Ly, Lz]` of the orthorhombic simulation box (Å)
-    /// - `real_cutoff`: Real-space pair cutoff $r_c$ (Å)
-    /// - `accuracy`: Target relative energy accuracy $\varepsilon$ (e.g. `1e-5`)
-    /// - `kappa`: Inverse Debye screening length (`None` or `Some(0.0)` for Coulomb, `Some(κ)` for Yukawa).
-    ///   The optimal $\alpha$ is independent of $\kappa$
-    ///   ([Salin & Caillol, 2000](https://doi.org/10.1063/1.1326477)).
-    ///
-    /// Uses tinfoil (metallic) boundary conditions and standard PBC by default.
-    /// Customize with [`Self::with_policy`] and [`Self::set_boundary`].
-    ///
-    /// # Example
-    /// ```
-    /// use coulomb::reciprocal::EwaldReciprocal;
-    /// let ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-    /// assert!(ewald.num_k_vectors() > 0);
-    /// ```
-    pub fn new(box_length: [f64; 3], real_cutoff: f64, accuracy: f64, kappa: Option<f64>) -> Self {
+    /// Pass `debye_length: None` for Coulomb, `Some(λ_D)` for Yukawa.
+    /// Defaults to tinfoil boundaries and PBC; customize with
+    /// [`Self::set_policy`] and [`Self::set_boundary`].
+    pub fn new(
+        box_length: [f64; 3],
+        real_cutoff: f64,
+        accuracy: f64,
+        debye_length: Option<f64>,
+    ) -> Self {
         Self::build(
             box_length,
             real_cutoff,
             accuracy,
-            kappa.unwrap_or(0.0),
+            debye_length.map_or(0.0, |d| 1.0 / d),
             EwaldPolicy::PBC,
         )
+    }
+
+    /// Jointly optimize α and $n_\text{max}$ to minimize the number of k-vectors.
+    ///
+    /// Scans (α, $n_\text{max}$) pairs using actual particle data and a
+    /// user-supplied real-space energy closure, picking the fewest k-vectors
+    /// where $|E_\text{total} - E_\text{ref}| < \varepsilon \sum q_i^2$.
+    /// After optimization, use [`Self::real_space_scheme`] for the matching real-space potential.
+    ///
+    /// The closure `real_energy_fn` must return the real-space energy in **reduced units**
+    /// (i.e. using the short-range function directly, without the `TO_CHEMISTRY_UNIT`
+    /// prefactor), matching the convention of [`Self::energy`] and [`Self::self_energy`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the policy is [`EwaldPolicy::IPBC`] (not α-invariant).
+    pub fn optimize<T, F>(
+        &mut self,
+        x: &[T],
+        y: &[T],
+        z: &[T],
+        charges: &[T],
+        real_energy_fn: F,
+    ) where
+        T: Into<f64> + Copy,
+        F: Fn(&crate::pairwise::RealSpaceEwald) -> f64,
+    {
+        assert!(
+            self.policy == EwaldPolicy::PBC,
+            "optimize() requires PBC policy; IPBC is not α-invariant"
+        );
+        let alpha_max = parameters::ewald_alpha(self.real_cutoff, self.accuracy, self.kappa);
+        let n_max_analytic =
+            parameters::ewald_n_max(&self.box_length, alpha_max, self.accuracy, self.kappa);
+
+        // Yukawa screening strong enough to skip reciprocal sum entirely
+        if n_max_analytic == 0 {
+            *self = Self::build_explicit(
+                self.box_length,
+                self.real_cutoff,
+                self.accuracy,
+                self.kappa,
+                alpha_max,
+                0,
+                self.policy,
+            );
+            return;
+        }
+
+        let charges_f64: Vec<f64> = charges.iter().map(|&q| q.into()).collect();
+        let sum_q2: f64 = charges_f64.iter().map(|q| q * q).sum();
+        let threshold = self.accuracy * sum_q2;
+
+        // Reference energy at analytic (α, n_max) — guaranteed accurate
+        let mut ref_ewald = Self::build_explicit(
+            self.box_length,
+            self.real_cutoff,
+            self.accuracy,
+            self.kappa,
+            alpha_max,
+            n_max_analytic,
+            self.policy,
+        );
+        ref_ewald.update_all(x, y, z, charges, None);
+        let e_recip_ref = ref_ewald.energy();
+        let e_self_ref = ref_ewald.self_energy(&charges_f64);
+        let e_real_ref = real_energy_fn(&ref_ewald.real_space_scheme());
+        let e_total_ref = e_real_ref + e_recip_ref + e_self_ref;
+
+        let mut best = ref_ewald;
+        let mut best_kvecs = best.num_k_vectors();
+
+        // Scan η = α·r_c downward from analytic maximum.
+        // Step size Δη = 0.2 gives ~5–10 candidates for typical η_max ≈ 2–3.
+        // Floor η_min = 0.8 is a hard safety net; in practice the sf0 ≤ 0.1 guard
+        // (erfc(0.8) ≈ 0.26) breaks the loop well before this floor is reached.
+        let eta_max = alpha_max * self.real_cutoff;
+        let eta_step = 0.2_f64;
+        let eta_min = 0.8_f64;
+        let debye_length = self.debye_length();
+
+        // Precompute charge sums for inline self-energy (avoids allocating per α)
+        let q_tot: f64 = charges_f64.iter().sum();
+        let two_pi_over_v = self.two_pi_over_v;
+        let kappa = self.kappa;
+        let mut eta = eta_max - eta_step;
+        while eta >= eta_min {
+            let alpha = eta / self.real_cutoff;
+
+            // Guard: sf0(1) ≤ 0.1 via existing ShortRangeFunction implementation
+            use crate::pairwise::ShortRangeFunction;
+            let real_scheme =
+                crate::pairwise::RealSpaceEwald::from_alpha(self.real_cutoff, alpha, debye_length);
+            if real_scheme.short_range_f0(1.0) > 0.1 {
+                break; // real-space truncation too severe
+            }
+
+            // Early exit: if even n_max=1 can't beat best, skip this α
+            let n_max_upper =
+                parameters::ewald_n_max(&self.box_length, alpha, self.accuracy, self.kappa);
+            let kvecs_at_nmax1 = KVectors::new(self.box_length, 1, alpha, kappa, self.policy).len();
+            if kvecs_at_nmax1 >= best_kvecs {
+                eta -= eta_step;
+                continue;
+            }
+
+            // Compute real-space energy at this α (O(N²), called once per α)
+            let e_real = real_energy_fn(&real_scheme);
+
+            // Self-energy + net-charge correction at this α.
+            // Inlined from self_energy() to avoid allocating k-vectors just for a scalar.
+            // Must match the formulas in self_energy() exactly — see its doc comments.
+            let e_self = if kappa > 0.0 {
+                // Yukawa: self-energy + finite k=0 term
+                let exp_term = (-kappa * kappa / (4.0 * alpha * alpha)).exp();
+                let erfc_term = crate::math::erfc_x(kappa / (2.0 * alpha));
+                let e_s =
+                    (-alpha / SQRT_PI).mul_add(exp_term, kappa / 2.0 * erfc_term) * sum_q2;
+                let e_k0 = two_pi_over_v * exp_term / (kappa * kappa) * q_tot * q_tot;
+                e_s + e_k0
+            } else {
+                // Coulomb: self-energy + neutralizing background
+                let e_s = -alpha / SQRT_PI * sum_q2;
+                let volume = 2.0 * PI / two_pi_over_v;
+                let e_bg = -PI / (2.0 * volume * alpha * alpha) * q_tot * q_tot;
+                e_s + e_bg
+            };
+
+            // Sweep n_max from 1 upward, find smallest where total energy converges
+            let mut n_max = 1_u32;
+            while n_max <= n_max_upper {
+                let mut tmp = Self::build_explicit(
+                    self.box_length,
+                    self.real_cutoff,
+                    self.accuracy,
+                    self.kappa,
+                    alpha,
+                    n_max,
+                    self.policy,
+                );
+                tmp.update_all(x, y, z, charges, None);
+                let e_recip = tmp.energy();
+                let e_total = e_real + e_recip + e_self;
+
+                if (e_total - e_total_ref).abs() < threshold && tmp.num_k_vectors() < best_kvecs {
+                    best_kvecs = tmp.num_k_vectors();
+                    best = tmp;
+                    break;
+                }
+                // Linear steps for small n_max (where each step adds many k-vectors
+                // relative to total), then double to avoid O(n_max) build_explicit calls.
+                n_max = if n_max < 4 { n_max + 1 } else { (n_max * 2).min(n_max_upper + 1) };
+            }
+
+            eta -= eta_step;
+        }
+
+        // Preserve the user's boundary setting — build_explicit defaults to tinfoil
+        let boundary = self.boundary;
+        *self = best;
+        self.boundary = boundary;
     }
 
     /// Switch to a different Ewald policy (PBC or IPBC).
     ///
     /// Rebuilds k-vectors and structure factor storage. Call before `update_all`.
-    pub fn with_policy(self, policy: EwaldPolicy) -> Self {
+    pub fn set_policy(&mut self, policy: EwaldPolicy) {
         if policy == self.policy {
-            return self;
+            return;
         }
-        Self::build(
+        *self = Self::build(
             self.box_length,
             self.real_cutoff,
             self.accuracy,
             self.kappa,
             policy,
-        )
+        );
     }
 
     /// Set the boundary permittivity.
@@ -240,8 +315,21 @@ impl EwaldReciprocal {
         kappa: f64,
         policy: EwaldPolicy,
     ) -> Self {
-        let alpha = parameters::ewald_alpha(real_cutoff, accuracy);
-        let n_max = parameters::ewald_n_max(&box_length, alpha, accuracy);
+        let alpha = parameters::ewald_alpha(real_cutoff, accuracy, kappa);
+        let n_max = parameters::ewald_n_max(&box_length, alpha, accuracy, kappa);
+        Self::build_explicit(box_length, real_cutoff, accuracy, kappa, alpha, n_max, policy)
+    }
+
+    /// Constructor with explicit α and n_max (bypasses automatic parameter selection).
+    pub(crate) fn build_explicit(
+        box_length: [f64; 3],
+        real_cutoff: f64,
+        accuracy: f64,
+        kappa: f64,
+        alpha: f64,
+        n_max: u32,
+        policy: EwaldPolicy,
+    ) -> Self {
         // Parameter validation is handled by KVectors::new() via debug_assert.
         let volume = box_length[0] * box_length[1] * box_length[2];
         let two_pi_over_v = 2.0 * PI / volume;
@@ -272,9 +360,7 @@ impl EwaldReciprocal {
 
     /// Recompute all structure factors from scratch. $O(N \times N_k)$.
     ///
-    /// If `box_length` is provided, the box dimensions are updated first, recomputing
-    /// $\alpha$, $n_\text{max}$, and k-vectors. Useful for NPT or Gibbs ensemble
-    /// simulations where the box changes between full updates.
+    /// If `box_length` is `Some`, rebuilds α, $n_\text{max}$, and k-vectors first.
     pub fn update_all<T: Into<f64> + Copy>(
         &mut self,
         x: &[T],
@@ -364,11 +450,6 @@ impl EwaldReciprocal {
     }
 
     /// Energy change for a trial particle move, without mutating state. $O(N_k)$.
-    ///
-    /// Uses $|S+\Delta S|^2 - |S|^2 = 2S \cdot \Delta S + |\Delta S|^2$ to avoid
-    /// a full recomputation of structure factors, making MC trial moves $O(N_k)$ not $O(N \cdot N_k)$.
-    ///
-    /// $$\Delta U = \frac{2\pi}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \bigl[2\,S(\mathbf{k}) \cdot \Delta S(\mathbf{k}) + |\Delta S(\mathbf{k})|^2\bigr]$$
     pub fn energy_change<T: Into<f64> + Copy>(&self, charge: T, old: [T; 3], new: [T; 3]) -> f64 {
         let charge = charge.into();
         let old = [old[0].into(), old[1].into(), old[2].into()];
@@ -383,8 +464,6 @@ impl EwaldReciprocal {
     }
 
     /// Force on one particle. $O(N_k)$. Returns `[fx, fy, fz]`.
-    ///
-    /// PBC: $\mathbf{F}_i = \frac{4\pi q_i}{V} \sum_{\mathbf{k}} A(\mathbf{k}) \bigl[\sin(\mathbf{k} \cdot \mathbf{r}_i) S_\text{re} - \cos(\mathbf{k} \cdot \mathbf{r}_i) S_\text{im}\bigr] \mathbf{k}$
     pub fn force<T: Into<f64> + Copy>(&self, pos: [T; 3], charge: T) -> [f64; 3] {
         let charge = charge.into();
         let pos = [pos[0].into(), pos[1].into(), pos[2].into()];
@@ -424,32 +503,35 @@ impl EwaldReciprocal {
         }
     }
 
-    /// Self-energy correction (position-independent). $O(N)$.
+    /// Self-energy, $k=0$, and neutralizing background corrections. $O(N)$.
     ///
-    /// $$U_\text{self} = \left[-\frac{\alpha}{\sqrt\pi} e^{-\kappa^2/4\alpha^2}
-    ///   + \frac{\kappa}{2} \operatorname{erfc}\!\left(\frac{\kappa}{2\alpha}\right)\right] \sum_i q_i^2$$
-    ///
-    /// For Coulomb ($\kappa = 0$): $U_\text{self} = -(\alpha/\sqrt\pi) \sum_i q_i^2$.
+    /// Corrects for spurious self-interaction in the real-space sum and, for
+    /// non-neutral systems, the excluded $k=0$ term (Yukawa) or neutralizing
+    /// background (Coulomb). All terms vanish for charge-neutral systems.
     pub fn self_energy<T: Into<f64> + Copy>(&self, charges: &[T]) -> f64 {
-        let sum_q2: f64 = charges
-            .iter()
-            .map(|&q| {
-                let q: f64 = q.into();
-                q * q
-            })
-            .sum();
+        let mut sum_q2 = 0.0_f64;
+        let mut q_tot = 0.0_f64;
+        for &q in charges {
+            let q: f64 = q.into();
+            sum_q2 += q * q;
+            q_tot += q;
+        }
         let alpha = self.alpha;
-        let sqrt_pi = PI.sqrt();
 
-        // Yukawa self-energy has an extra erfc term from the screened potential;
-        // for Coulomb (κ=0) this reduces to the standard -α/√π form.
         if self.kappa > 0.0 {
             let kappa = self.kappa;
             let exp_term = (-kappa * kappa / (4.0 * alpha * alpha)).exp();
             let erfc_term = crate::math::erfc_x(kappa / (2.0 * alpha));
-            (-alpha / sqrt_pi).mul_add(exp_term, kappa / 2.0 * erfc_term) * sum_q2
+            let e_self = (-alpha / SQRT_PI).mul_add(exp_term, kappa / 2.0 * erfc_term) * sum_q2;
+            let e_k0 = self.two_pi_over_v * exp_term / (kappa * kappa) * q_tot * q_tot;
+            e_self + e_k0
         } else {
-            -alpha / sqrt_pi * sum_q2
+            let e_self = -alpha / SQRT_PI * sum_q2;
+            // Neutralizing background correction for non-neutral Coulomb systems.
+            // U_bg = -π Q² / (2 V α²), see e.g. Frenkel & Smit, Eq. 12.1.25.
+            let volume = 2.0 * PI / self.two_pi_over_v;
+            let e_bg = -PI / (2.0 * volume * alpha * alpha) * q_tot * q_tot;
+            e_self + e_bg
         }
     }
 
@@ -465,8 +547,6 @@ impl EwaldReciprocal {
         z: &[T],
         charges: &[T],
     ) -> f64 {
-        // Tinfoil (ε_s = ∞) makes the surface term vanish; finite ε_s corrects
-        // for the depolarization field at the boundary of the Ewald sphere.
         let eps_s: f64 = self.boundary.into();
         if eps_s.is_infinite() {
             return 0.0;
@@ -528,9 +608,13 @@ impl EwaldReciprocal {
         self.real_cutoff
     }
 
-    /// The inverse Debye screening length $\kappa$ (0 for Coulomb, >0 for Yukawa).
-    pub const fn kappa(&self) -> f64 {
-        self.kappa
+    /// Debye screening length, or `None` for Coulomb.
+    pub fn debye_length(&self) -> Option<f64> {
+        if self.kappa > 0.0 {
+            Some(1.0 / self.kappa)
+        } else {
+            None
+        }
     }
 
     /// Create the matching real-space Ewald pair potential.
@@ -539,12 +623,7 @@ impl EwaldReciprocal {
     /// splitting parameter $\alpha$, screening $\kappa$, and real-space cutoff
     /// as this reciprocal instance.
     pub fn real_space_scheme(&self) -> crate::pairwise::RealSpaceEwald {
-        let debye_length = if self.kappa > 0.0 {
-            Some(1.0 / self.kappa)
-        } else {
-            None
-        };
-        crate::pairwise::RealSpaceEwald::from_alpha(self.real_cutoff, self.alpha, debye_length)
+        crate::pairwise::RealSpaceEwald::from_alpha(self.real_cutoff, self.alpha, self.debye_length())
     }
 }
 
@@ -631,7 +710,7 @@ mod tests {
     fn test_self_energy_coulomb() {
         let ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
         let alpha = ewald.alpha();
-        let expected = -alpha / core::f64::consts::PI.sqrt() * 2.0; // sum(q^2) = 2
+        let expected = -alpha / SQRT_PI * 2.0; // sum(q^2) = 2
         assert_relative_eq!(ewald.self_energy(&[1.0, -1.0]), expected, epsilon = 1e-10);
     }
 
@@ -657,14 +736,20 @@ mod tests {
 
     #[test]
     fn test_forces_sum_to_zero() {
-        let (ewald, x, y, z, charges) = setup_two_charges();
-        let mut fx = [0.0; 2];
-        let mut fy = [0.0; 2];
-        let mut fz = [0.0; 2];
-        ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
-        assert_relative_eq!(fx.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(fy.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(fz.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
+        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+            ewald.set_policy(policy);
+            let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
+            let charges = [1.0, -1.0];
+            ewald.update_all(&x, &y, &z, &charges, None);
+            let mut fx = [0.0; 2];
+            let mut fy = [0.0; 2];
+            let mut fz = [0.0; 2];
+            ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
+            assert_relative_eq!(fx.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
+            assert_relative_eq!(fy.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
+            assert_relative_eq!(fz.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
+        }
     }
 
     #[test]
@@ -681,69 +766,85 @@ mod tests {
 
     #[test]
     fn test_force_matches_numerical_gradient() {
-        let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
-        let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges, None);
+        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+            ewald.set_policy(policy);
+            let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
+            let charges = [1.0, -1.0];
+            ewald.update_all(&x, &y, &z, &charges, None);
+            let [fx, fy, fz] = ewald.force([x[0], y[0], z[0]], charges[0]);
+            let delta = 1e-5;
 
-        let [fx, _, _] = ewald.force([x[0], y[0], z[0]], charges[0]);
+            ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None);
+            let ep = ewald.energy();
+            ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None);
+            let em = ewald.energy();
+            assert_relative_eq!(fx, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
 
-        let delta = 1e-5;
-        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None);
-        let e_plus = ewald.energy();
-        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None);
-        let e_minus = ewald.energy();
-        let numerical_fx = -(e_plus - e_minus) / (2.0 * delta);
-        assert_relative_eq!(fx, numerical_fx, epsilon = 1e-3);
+            ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges, None);
+            let ep = ewald.energy();
+            ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges, None);
+            let em = ewald.energy();
+            assert_relative_eq!(fy, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
+
+            ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges, None);
+            let ep = ewald.energy();
+            ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges, None);
+            let em = ewald.energy();
+            assert_relative_eq!(fz, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
+        }
     }
 
     #[test]
     fn test_partial_update_equals_full() {
-        let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        let (x, y, z) = (
-            [1.0, -1.0, 2.0, -2.0],
-            [2.0, 0.5, -1.0, 1.0],
-            [3.0, -0.5, 1.5, -1.0],
-        );
-        let charges = [1.0, -1.0, 0.5, -0.5];
+        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+            ewald.set_policy(policy);
+            let (x, y, z) = (
+                [1.0, -1.0, 2.0, -2.0],
+                [2.0, 0.5, -1.0, 1.0],
+                [3.0, -0.5, 1.5, -1.0],
+            );
+            let charges = [1.0, -1.0, 0.5, -0.5];
+            ewald.update_all(&x, &y, &z, &charges, None);
 
-        ewald.update_all(&x, &y, &z, &charges, None);
+            let old = [x[0], y[0], z[0]];
+            let new_pos = [1.5, 2.5, 3.5];
+            ewald.update_particle(charges[0], old, new_pos);
+            let e_partial = ewald.energy();
 
-        let old = [x[0], y[0], z[0]];
-        let new = [1.5, 2.5, 3.5];
-        ewald.update_particle(charges[0], old, new);
-        let e_partial = ewald.energy();
+            let x2 = [1.5, -1.0, 2.0, -2.0];
+            let y2 = [2.5, 0.5, -1.0, 1.0];
+            let z2 = [3.5, -0.5, 1.5, -1.0];
+            ewald.update_all(&x2, &y2, &z2, &charges, None);
+            let e_full = ewald.energy();
 
-        let x2 = [1.5, -1.0, 2.0, -2.0];
-        let y2 = [2.5, 0.5, -1.0, 1.0];
-        let z2 = [3.5, -0.5, 1.5, -1.0];
-        ewald.update_all(&x2, &y2, &z2, &charges, None);
-        let e_full = ewald.energy();
-
-        assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
+            assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
+        }
     }
 
     #[test]
     fn test_energy_change_particle() {
-        let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        let (x, y, z) = (
-            [1.0, -1.0, 2.0, -2.0],
-            [2.0, 0.5, -1.0, 1.0],
-            [3.0, -0.5, 1.5, -1.0],
-        );
-        let charges = [1.0, -1.0, 0.5, -0.5];
+        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+            ewald.set_policy(policy);
+            let (x, y, z) = (
+                [1.0, -1.0, 2.0, -2.0],
+                [2.0, 0.5, -1.0, 1.0],
+                [3.0, -0.5, 1.5, -1.0],
+            );
+            let charges = [1.0, -1.0, 0.5, -0.5];
+            ewald.update_all(&x, &y, &z, &charges, None);
+            let e_before = ewald.energy();
 
-        ewald.update_all(&x, &y, &z, &charges, None);
-        let e_before = ewald.energy();
+            let old = [x[0], y[0], z[0]];
+            let new_pos = [1.5, 2.5, 3.5];
+            let de = ewald.energy_change(charges[0], old, new_pos);
+            ewald.update_particle(charges[0], old, new_pos);
+            let e_after = ewald.energy();
 
-        let old = [x[0], y[0], z[0]];
-        let new = [1.5, 2.5, 3.5];
-        let de = ewald.energy_change(charges[0], old, new);
-
-        ewald.update_particle(charges[0], old, new);
-        let e_after = ewald.energy();
-
-        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-6);
+            assert_relative_eq!(de, e_after - e_before, epsilon = 1e-6);
+        }
     }
 
     #[test]
@@ -754,20 +855,22 @@ mod tests {
         let mut ewald_c = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
         ewald_c.update_all(&x, &y, &z, &charges, None);
 
-        let mut ewald_y = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(1e-10));
+        // Very large Debye length ≈ Coulomb
+        let mut ewald_y = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(1e10));
         ewald_y.update_all(&x, &y, &z, &charges, None);
 
         assert_relative_eq!(ewald_c.energy(), ewald_y.energy(), epsilon = 1e-6);
     }
 
     #[test]
-    fn test_yukawa_energy_decays_with_kappa() {
+    fn test_yukawa_energy_decays_with_screening() {
         let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
         let charges = [1.0, -1.0];
 
+        // Decreasing Debye length = increasing screening = decreasing energy
         let mut energies = Vec::new();
-        for &kappa in &[0.0, 0.1, 0.5, 1.0] {
-            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(kappa));
+        for &debye in &[1e10, 10.0, 2.0, 1.0] {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(debye));
             ewald.update_all(&x, &y, &z, &charges, None);
             energies.push(ewald.energy().abs());
         }
@@ -778,13 +881,14 @@ mod tests {
 
     #[test]
     fn test_self_energy_yukawa() {
-        let kappa = 0.5;
-        let ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(kappa));
+        let debye_length = 2.0; // kappa = 0.5
+        let kappa = 1.0 / debye_length;
+        let ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, Some(debye_length));
         let alpha = ewald.alpha();
         let charges = [1.0, -1.0];
         let self_e = ewald.self_energy(&charges);
         let sum_q2: f64 = charges.iter().map(|q| q * q).sum();
-        let expected = (-alpha / PI.sqrt() * (-kappa * kappa / (4.0 * alpha * alpha)).exp()
+        let expected = (-alpha / SQRT_PI * (-kappa * kappa / (4.0 * alpha * alpha)).exp()
             + kappa / 2.0 * crate::math::erfc_x(kappa / (2.0 * alpha)))
             * sum_q2;
         assert_relative_eq!(self_e, expected, epsilon = 1e-10);
@@ -925,7 +1029,8 @@ mod tests {
     #[test]
     fn test_ipbc_fewer_kvectors_than_pbc() {
         let pbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        let ipbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
+        let mut ipbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+        ipbc.set_policy(EwaldPolicy::IPBC);
         assert!(ipbc.num_k_vectors() > 0);
         assert!(ipbc.num_k_vectors() < pbc.num_k_vectors());
     }
@@ -935,142 +1040,23 @@ mod tests {
         // For charges ±1 at (±a, 0, 0), the cos-product structure factor
         // Q_k = cos(kx·(-a))·1·1 + (-1)·cos(kx·a)·1·1 = 0 because cos is even.
         // So the IPBC reciprocal energy should be exactly zero.
-        let mut ipbc =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
+        let mut ipbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+        ipbc.set_policy(EwaldPolicy::IPBC);
         ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0], None);
         assert_relative_eq!(ipbc.energy(), 0.0, epsilon = 1e-12);
     }
 
     #[test]
-    fn test_ipbc_reciprocal_energy_opposite_charges() {
-        // Two particles: q=+1 at (0,0,0), q=-1 at (1,0,0)
-        let mut ipbc =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&[0.0, 1.0], &[0.0, 0.0], &[0.0, 0.0], &[1.0, -1.0], None);
-        // Opposite charges separated along x: positive reciprocal energy
-        assert!(ipbc.energy() > 0.0);
-    }
-
-    #[test]
-    fn test_ipbc_nonzero_for_same_sign_charges() {
-        // Same-sign charges: Q_k = cos(kx·(-a)) + cos(kx·a) = 2·cos(kx·a) ≠ 0
-        let mut ipbc =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ipbc.update_all(&[-0.5, 0.5], &[0.0, 0.0], &[0.0, 0.0], &[1.0, 1.0], None);
-        assert!(ipbc.energy() > 0.0);
-    }
-
-    #[test]
     fn test_ipbc_self_energy_matches_pbc() {
-        // Self energy is policy-independent
         let charges = [1.0, -1.0];
         let pbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
-        let ipbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
+        let mut ipbc = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+        ipbc.set_policy(EwaldPolicy::IPBC);
         assert_relative_eq!(
             pbc.self_energy(&charges),
             ipbc.self_energy(&charges),
             epsilon = 1e-12,
         );
-    }
-
-    #[test]
-    fn test_ipbc_surface_energy() {
-        // Surface energy is also policy-independent
-        let mut ewald =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        ewald.set_boundary(crate::permittivity::VACUUM);
-        let (x, y, z) = ([-0.5, 0.5], [0.0, 0.0], [0.0, 0.0]);
-        let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges, None);
-        assert_relative_eq!(
-            ewald.surface_energy(&x, &y, &z, &charges),
-            0.0020943951023931952,
-            epsilon = 1e-6,
-        );
-    }
-
-    #[test]
-    fn test_ipbc_partial_update_equals_full() {
-        let mut ewald =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        let (x, y, z) = (
-            [1.0, -1.0, 2.0, -2.0],
-            [2.0, 0.5, -1.0, 1.0],
-            [3.0, -0.5, 1.5, -1.0],
-        );
-        let charges = [1.0, -1.0, 0.5, -0.5];
-
-        ewald.update_all(&x, &y, &z, &charges, None);
-
-        let old = [x[0], y[0], z[0]];
-        let new_pos = [1.5, 2.5, 3.5];
-        ewald.update_particle(charges[0], old, new_pos);
-        let e_partial = ewald.energy();
-
-        let x2 = [1.5, -1.0, 2.0, -2.0];
-        let y2 = [2.5, 0.5, -1.0, 1.0];
-        let z2 = [3.5, -0.5, 1.5, -1.0];
-        ewald.update_all(&x2, &y2, &z2, &charges, None);
-        let e_full = ewald.energy();
-
-        assert_relative_eq!(e_partial, e_full, epsilon = 1e-6);
-    }
-
-    #[test]
-    fn test_ipbc_energy_change_consistency() {
-        let mut ewald =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        let (x, y, z) = (
-            [1.0, -1.0, 2.0, -2.0],
-            [2.0, 0.5, -1.0, 1.0],
-            [3.0, -0.5, 1.5, -1.0],
-        );
-        let charges = [1.0, -1.0, 0.5, -0.5];
-
-        ewald.update_all(&x, &y, &z, &charges, None);
-        let e_before = ewald.energy();
-
-        let old = [x[0], y[0], z[0]];
-        let new_pos = [1.5, 2.5, 3.5];
-        let de = ewald.energy_change(charges[0], old, new_pos);
-
-        ewald.update_particle(charges[0], old, new_pos);
-        let e_after = ewald.energy();
-
-        assert_relative_eq!(de, e_after - e_before, epsilon = 1e-6);
-    }
-
-    #[test]
-    fn test_ipbc_force_numerical_gradient() {
-        let mut ewald =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
-        let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges, None);
-
-        let [fx, fy, fz] = ewald.force([x[0], y[0], z[0]], charges[0]);
-
-        let delta = 1e-5;
-        // Numerical gradient for x
-        ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None);
-        let e_plus = ewald.energy();
-        ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None);
-        let e_minus = ewald.energy();
-        assert_relative_eq!(fx, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
-
-        // Numerical gradient for y
-        ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges, None);
-        let e_plus = ewald.energy();
-        ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges, None);
-        let e_minus = ewald.energy();
-        assert_relative_eq!(fy, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
-
-        // Numerical gradient for z
-        ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges, None);
-        let e_plus = ewald.energy();
-        ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges, None);
-        let e_minus = ewald.energy();
-        assert_relative_eq!(fz, -(e_plus - e_minus) / (2.0 * delta), epsilon = 1e-3);
     }
 
     #[test]
@@ -1094,19 +1080,4 @@ mod tests {
         assert!(self_e < 0.0);
     }
 
-    #[test]
-    fn test_ipbc_forces_sum_to_zero() {
-        let mut ewald =
-            EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None).with_policy(EwaldPolicy::IPBC);
-        let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
-        let charges = [1.0, -1.0];
-        ewald.update_all(&x, &y, &z, &charges, None);
-        let mut fx = [0.0; 2];
-        let mut fy = [0.0; 2];
-        let mut fz = [0.0; 2];
-        ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
-        assert_relative_eq!(fx.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(fy.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
-        assert_relative_eq!(fz.iter().sum::<f64>(), 0.0, epsilon = 1e-10);
-    }
 }

@@ -4,15 +4,8 @@ use wide::{f64x4, i64x4, CmpEq};
 type Simd = f64x4;
 const LANES: usize = 4;
 
-/// SIMD polynomial sin_cos with f32-level accuracy (~7 digits).
-///
-/// Uses Cody-Waite range reduction (3-part π/2 for extended precision) and
-/// minimax polynomials: degree 7 for sin, degree 8 for cos. Coefficients
-/// from Sleef (https://sleef.org). Quadrant handling via branchless SIMD
-/// bit manipulation.
-///
-/// This is ~40% fewer FMAs than wide's built-in f64x4::sin_cos() (which
-/// targets full f64 precision), and avoids per-lane scalar libm calls.
+/// SIMD sin_cos with f32-level accuracy (~7 digits).
+/// Cody-Waite reduction + Sleef minimax polynomials (deg 7 sin, deg 8 cos).
 #[inline]
 fn sin_cos_poly(x: Simd) -> (Simd, Simd) {
     // Range reduction constants: DP1 + DP2 + DP3 = π/2 (extended precision)
@@ -69,11 +62,8 @@ fn sin_cos_poly(x: Simd) -> (Simd, Simd) {
     (sin_out, cos_out)
 }
 
-/// SIMD cosine-only polynomial with f32-level accuracy (~7 digits).
-///
-/// Same range reduction and cos polynomial as `sin_cos_poly`, but skips
-/// the sine polynomial, sine sign correction, and one blend — saving ~30%
-/// of the work when only cosine is needed (all IPBC paths except force).
+/// SIMD cosine-only with f32-level accuracy (~7 digits).
+/// Same range reduction as `sin_cos_poly` but skips the sine path.
 #[inline]
 fn cos_poly(x: Simd) -> Simd {
     const FRAC_2_PI: f64 = std::f64::consts::FRAC_2_PI;

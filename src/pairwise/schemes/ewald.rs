@@ -97,22 +97,15 @@ impl RealSpaceEwald {
     /// Square root of pi
     const SQRT_PI: f64 = 1.7724538509055159;
 
-    /// Construct a new real-space Ewald scheme from cutoff and target accuracy.
-    ///
-    /// Derives the splitting parameter α via the Kolafa–Perram estimate
-    /// α = √(−ln ε) / r_c (see [`ewald_alpha`](crate::reciprocal::ewald_alpha)).
-    ///
-    /// # Arguments
-    /// - `cutoff`: Real-space cutoff distance, r_c
-    /// - `accuracy`: Target relative energy accuracy ε (e.g. `1e-5`), must be in (0, 1)
-    /// - `debye_length`: Optional Debye screening length (same unit as cutoff)
+    /// Construct from cutoff and accuracy target. Derives α automatically.
     pub fn new(cutoff: f64, accuracy: f64, debye_length: Option<f64>) -> Self {
-        let alpha = crate::reciprocal::ewald_alpha(cutoff, accuracy);
+        let kappa = debye_length.map_or(0.0, |d| 1.0 / d);
+        let alpha = crate::reciprocal::parameters::ewald_alpha(cutoff, accuracy, kappa);
         Self::from_alpha(cutoff, alpha, debye_length)
     }
 
     /// Internal constructor from explicit alpha (used by serde and `real_space_scheme`).
-    pub(crate) fn from_alpha(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
+    pub fn from_alpha(cutoff: f64, alpha: f64, debye_length: Option<f64>) -> Self {
         Self {
             cutoff,
             debye_length,

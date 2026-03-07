@@ -2,15 +2,7 @@ use core::f64::consts::PI;
 
 use super::EwaldPolicy;
 
-/// Private k-vector storage with precomputed A(k) coefficients.
-///
-/// Stored in SoA layout for cache-friendly inner loops and SIMD.
-/// Uses f32 for k-vector components and coefficients to halve memory
-/// bandwidth and enable 8-wide SIMD (f32x8). Structure factor
-/// accumulation uses f64 for numerical safety.
-///
-/// For PBC: half-shell k-vectors (one of each ±k pair), A(k) doubled.
-/// For IPBC: first-octant k-vectors (nx,ny,nz ≥ 0), A(k) includes octant symmetry factor.
+/// K-vector storage (SoA, f32) with precomputed A(k) coefficients.
 #[derive(Clone)]
 pub(super) struct KVectors {
     pub(super) kx: Vec<f32>,

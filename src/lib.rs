@@ -113,6 +113,7 @@ mod medium;
 pub mod pairwise;
 pub mod permittivity;
 pub mod reciprocal;
+pub use reciprocal::{EwaldPolicy, EwaldReciprocal};
 mod salt;
 mod spline;
 pub use medium::Medium;
