@@ -25,7 +25,7 @@ wide = { version = "1.1", optional = true }
 [features]
 default = ["uom"]
 uom = ["dep:uom", "dep:num-traits"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "mint/serde"]
 simd = ["dep:wide"]
 
 [dev-dependencies]

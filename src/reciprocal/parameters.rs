@@ -107,7 +107,10 @@ mod tests {
         let alpha_y = ewald_alpha(15.0, 1e-3, kappa);
         let n_c = ewald_n_max(&[400.0; 3], alpha_c, 1e-3, 0.0);
         let n_y = ewald_n_max(&[400.0; 3], alpha_y, 1e-3, kappa);
-        assert!(n_y < n_c, "Yukawa n_max={n_y} should be < Coulomb n_max={n_c}");
+        assert!(
+            n_y < n_c,
+            "Yukawa n_max={n_y} should be < Coulomb n_max={n_c}"
+        );
     }
 
     #[test]
