@@ -20,16 +20,23 @@ num-integer = "0.1"
 num-traits = { version = "0.2", optional = true }
 serde = { version = "1.0", features = ["derive", "std"], optional = true, default-features = false }
 uom = { version = "0.36", optional = true, features = ["si", "f64"], default-features = false }
+wide = { version = "1.1", optional = true }
 
 [features]
 default = ["uom"]
 uom = ["dep:uom", "dep:num-traits"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "mint/serde"]
+simd = ["dep:wide"]
 
 [dev-dependencies]
 approx = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
 image = "0.25"
 colorgrad = "0.6"
+
+[[bench]]
+name = "reciprocal"
+harness = false
 
 # See https://github.com/victe/rust-latex-doc-minimal-example
 # for including math in the documentation:

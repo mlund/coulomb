@@ -13,8 +13,8 @@
 // limitations under the license.
 
 use crate::permittivity::RelativePermittivity;
-use crate::*;
 use crate::Result;
+use crate::*;
 use core::fmt::{Display, Formatter};
 use permittivity::{ConstantPermittivity, Permittivity};
 #[cfg(feature = "serde")]
@@ -64,7 +64,11 @@ pub struct Medium {
 
 impl Medium {
     /// Creates a new medium
-    pub const fn new(temperature: f64, permittivity: Permittivity, salt: Option<(Salt, f64)>) -> Self {
+    pub const fn new(
+        temperature: f64,
+        permittivity: Permittivity,
+        salt: Option<(Salt, f64)>,
+    ) -> Self {
         Self {
             permittivity,
             salt,
