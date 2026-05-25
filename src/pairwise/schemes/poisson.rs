@@ -17,9 +17,37 @@
 
 use crate::debye_length::DebyeLength;
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
-use num_integer::binomial;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize};
+
+/// Fixed capacity of the compile-time coefficient table ([`Poisson::COEFFS`]).
+///
+/// The table is sized to a constant rather than to `C` because stable Rust
+/// cannot use a const-generic expression as an array length: `[_; C as usize]`
+/// requires the unstable `generic_const_exprs`. Every published scheme has
+/// `C <= 4`, so 8 is ample headroom; a larger `C` trips the assert in `COEFFS`.
+const MAX_C: usize = 8;
+
+/// Binomial coefficient `n` over `k`, usable in `const` context.
+///
+/// Returns 0 when `k < 0`, `n < 0`, or `k > n` — matching the only cases that
+/// arise when building the Poisson coefficient table. (`num_integer::binomial`
+/// is not `const`, hence this small local version.)
+const fn binomial(mut n: i64, k: i64) -> i64 {
+    if k < 0 || n < 0 {
+        return 0;
+    }
+    let mut numerator: i64 = 1;
+    let mut denominator: i64 = 1;
+    let mut i: i64 = 0;
+    while i < k {
+        numerator *= n;
+        denominator *= i + 1;
+        n -= 1;
+        i += 1;
+    }
+    numerator / denominator
+}
 
 /// # Scheme for the Poisson short-range function
 ///
@@ -102,8 +130,6 @@ pub struct Poisson<const C: i32, const D: i32> {
     #[cfg_attr(feature = "serde", serde(skip))]
     _has_dipolar_selfenergy: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
-    binom_cdc: f64,
-    #[cfg_attr(feature = "serde", serde(skip))]
     screening: Option<Screening>,
 }
 
@@ -174,19 +200,72 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
 
         let screening = debye_length.map(|d| Screening::new(d, cutoff));
 
-        let binom_cdc = if screening.is_some() || D != -C {
-            f64::from(binomial(C + D, C) * D)
-        } else {
-            0.0
-        };
-
         Self {
             cutoff,
             debye_length,
             _has_dipolar_selfenergy,
-            binom_cdc,
             screening,
         }
+    }
+
+    /// Integer numerators `bᶜ = (D−1+c choose c)·(C−c)` of the short-range
+    /// polynomial, evaluated at compile time and shared by every instance of a
+    /// given `(C, D)`. The `÷C` is deferred to evaluation time, keeping the
+    /// table pure-integer (and thus `const`-evaluable on stable Rust).
+    const COEFFS: [i64; MAX_C] = {
+        assert!(C >= 1, "Poisson: C must be >= 1");
+        assert!(
+            C as usize <= MAX_C,
+            "Poisson: C exceeds the coefficient-table cap MAX_C; increase MAX_C"
+        );
+        // Bound `D` so the falling-factorial numerators in `binomial` cannot
+        // overflow `i64` during const-eval (which would otherwise surface as a
+        // cryptic E0080). 12 sits far above every published scheme (D <= 3) and
+        // is safe for all C <= MAX_C; raising it requires wider intermediates.
+        assert!(
+            D <= 12,
+            "Poisson: D exceeds the i64 coefficient-table limit (12)"
+        );
+        let mut coeffs = [0i64; MAX_C];
+        let mut c = 0i32;
+        while c < C {
+            coeffs[c as usize] = binomial((D - 1 + c) as i64, c as i64) * (C - c) as i64;
+            c += 1;
+        }
+        coeffs
+    };
+
+    /// `(C+D choose C)·D`, evaluated at compile time (used by the 2nd and 3rd
+    /// derivatives). When `D == -C` this is zero and the derivatives short-circuit
+    /// before it is read.
+    const BINOM_CDC: i64 = binomial(C as i64 + D as i64, C as i64) * D as i64;
+
+    /// Short-range polynomial `S̃(qp) = Σ_{c=0}^{C-1} (bᶜ/C)·qpᶜ` and its
+    /// derivative `dS̃/dqp`, via a single (simultaneous) Horner pass over the
+    /// compile-time [`Self::COEFFS`].
+    #[inline]
+    fn poly_and_deriv(qp: f64) -> (f64, f64) {
+        let divc = C as f64;
+        let mut poly = Self::COEFFS[(C - 1) as usize] as f64 / divc;
+        let mut deriv = 0.0;
+        for c in (0..C - 1).rev() {
+            deriv = deriv * qp + poly;
+            poly = poly * qp + Self::COEFFS[c as usize] as f64 / divc;
+        }
+        (poly, deriv)
+    }
+
+    /// First derivative `dS/dqp` of the full short-range function `S = (1-qp)^{D+1}·S̃`.
+    #[inline]
+    fn dsdqp(qp: f64) -> f64 {
+        let (poly, dpoly) = Self::poly_and_deriv(qp);
+        -f64::from(D + 1) * (1.0 - qp).powi(D) * poly + (1.0 - qp).powi(D + 1) * dpoly
+    }
+
+    /// Second derivative `d²S/dqp²`, which collapses to a single monomial.
+    #[inline]
+    fn d2sdqp2(qp: f64) -> f64 {
+        Self::BINOM_CDC as f64 * (1.0 - qp).powi(D - 1) * qp.powi(C - 1)
     }
 }
 
@@ -236,11 +315,8 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             return 1.0 - qp;
         }
 
-        // todo: could binomial coeffs be evaluated at compile time? E.g. with recursion.
-        let sum: f64 = (0..C)
-            .map(|c| (binomial(D - 1 + c, c) * (C - c)) as f64 / f64::from(C) * qp.powi(c))
-            .sum();
-        (1.0 - qp).powi(D + 1) * sum
+        let (poly, _) = Self::poly_and_deriv(qp);
+        (1.0 - qp).powi(D + 1) * poly
     }
     fn short_range_f1(&self, q: f64) -> f64 {
         if D == -C {
@@ -257,16 +333,7 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         } else {
             (q, 1.0)
         };
-        let mut sum1 = 1.0;
-        let mut sum2 = 0.0;
-
-        for c in 1..C {
-            let factor = (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64;
-            sum1 += factor * qp.powi(c);
-            sum2 += factor * c as f64 * qp.powi(c - 1);
-        }
-        let dsdqp = -f64::from(D + 1) * (1.0 - qp).powi(D) * sum1 + (1.0 - qp).powi(D + 1) * sum2;
-        dsdqp * dqpdq
+        Self::dsdqp(qp) * dqpdq
     }
 
     fn short_range_f2(&self, q: f64) -> f64 {
@@ -278,25 +345,15 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
         }
 
         let (qp, dqpdq, d2qpdq2, dsdqp) = if let Some(s) = &self.screening {
-            let qp = (1.0 - (2.0 * s.reduced_kappa * q).exp()) * s.yukawa_denom;
-            let dqpdq = -2.0 * s.reduced_kappa * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            let d2qpdq2 =
-                -4.0 * s.reduced_kappa_squared * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            let mut tmp1 = 1.0;
-            let mut tmp2 = 0.0;
-            for c in 1..C {
-                let b = binomial(D - 1 + c, c) as f64 * (C - c) as f64;
-                tmp1 += b / C as f64 * qp.powi(c);
-                tmp2 += b * c as f64 / C as f64 * qp.powi(c - 1);
-            }
-            let dsdqp =
-                -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
-            (qp, dqpdq, d2qpdq2, dsdqp)
+            let exp2kq = (2.0 * s.reduced_kappa * q).exp();
+            let qp = (1.0 - exp2kq) * s.yukawa_denom;
+            let dqpdq = -2.0 * s.reduced_kappa * exp2kq * s.yukawa_denom;
+            let d2qpdq2 = -4.0 * s.reduced_kappa_squared * exp2kq * s.yukawa_denom;
+            (qp, dqpdq, d2qpdq2, Self::dsdqp(qp))
         } else {
             (q, 1.0, 0.0, 0.0)
         };
-        let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
-        d2sdqp2 * dqpdq * dqpdq + dsdqp * d2qpdq2
+        Self::d2sdqp2(qp) * dqpdq * dqpdq + dsdqp * d2qpdq2
     }
 
     fn short_range_f3(&self, q: f64) -> f64 {
@@ -307,32 +364,19 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             return 0.0;
         }
 
+        let binom_cdc = Self::BINOM_CDC as f64;
         let (qp, dqpdq, d2qpdq2, d3qpdq3, d2sdqp2, dsdqp) = if let Some(s) = &self.screening {
-            let qp = (1.0 - (2.0 * s.reduced_kappa * q).exp()) * s.yukawa_denom;
-            let dqpdq = -2.0 * s.reduced_kappa * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            let d2qpdq2 =
-                -4.0 * s.reduced_kappa_squared * (2.0 * s.reduced_kappa * q).exp() * s.yukawa_denom;
-            let d3qpdq3 = -8.0
-                * s.reduced_kappa_squared
-                * s.reduced_kappa
-                * (2.0 * s.reduced_kappa * q).exp()
-                * s.yukawa_denom;
-            let d2sdqp2 = self.binom_cdc * (1.0 - qp).powi(D - 1) * qp.powi(C - 1);
-            let mut tmp1 = 1.0;
-            let mut tmp2 = 0.0;
-            for c in 1..C {
-                tmp1 += (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64 * qp.powi(c);
-                tmp2 += (binomial(D - 1 + c, c) * (C - c)) as f64 / C as f64
-                    * c as f64
-                    * qp.powi(c - 1);
-            }
-            let dsdqp =
-                -f64::from(D + 1) * (1.0 - qp).powi(D) * tmp1 + (1.0 - qp).powi(D + 1) * tmp2;
-            (qp, dqpdq, d2qpdq2, d3qpdq3, d2sdqp2, dsdqp)
+            let exp2kq = (2.0 * s.reduced_kappa * q).exp();
+            let qp = (1.0 - exp2kq) * s.yukawa_denom;
+            let dqpdq = -2.0 * s.reduced_kappa * exp2kq * s.yukawa_denom;
+            let d2qpdq2 = -4.0 * s.reduced_kappa_squared * exp2kq * s.yukawa_denom;
+            let d3qpdq3 =
+                -8.0 * s.reduced_kappa_squared * s.reduced_kappa * exp2kq * s.yukawa_denom;
+            (qp, dqpdq, d2qpdq2, d3qpdq3, Self::d2sdqp2(qp), Self::dsdqp(qp))
         } else {
             (q, 1.0, 0.0, 0.0, 0.0, 0.0)
         };
-        let d3sdqp3 = self.binom_cdc
+        let d3sdqp3 = binom_cdc
             * (1.0 - qp).powi(D - 2)
             * qp.powi(C - 2)
             * ((2.0 - C as f64 - D as f64) * qp + C as f64 - 1.0);
