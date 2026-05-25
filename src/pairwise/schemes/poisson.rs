@@ -218,6 +218,14 @@ impl<const C: i32, const D: i32> Poisson<C, D> {
             C as usize <= MAX_C,
             "Poisson: C exceeds the coefficient-table cap MAX_C; increase MAX_C"
         );
+        // Bound `D` so the falling-factorial numerators in `binomial` cannot
+        // overflow `i64` during const-eval (which would otherwise surface as a
+        // cryptic E0080). 12 sits far above every published scheme (D <= 3) and
+        // is safe for all C <= MAX_C; raising it requires wider intermediates.
+        assert!(
+            D <= 12,
+            "Poisson: D exceeds the i64 coefficient-table limit (12)"
+        );
         let mut coeffs = [0i64; MAX_C];
         let mut c = 0i32;
         while c < C {
