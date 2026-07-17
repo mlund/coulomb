@@ -42,7 +42,6 @@ pub struct EwaldTruncated {
     /// Cutoff radius
     cutoff: f64,
     /// Alpha
-    #[cfg_attr(feature = "serde", serde(alias = "α"))]
     alpha: f64,
     /// Reduced alpha = alpha * cutoff
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -68,6 +67,7 @@ impl<'de> Deserialize<'de> for EwaldTruncated {
         #[serde(deny_unknown_fields)]
         struct EwaldTruncatedData {
             cutoff: f64,
+            #[serde(alias = "α")]
             alpha: f64,
         }
 
