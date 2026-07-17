@@ -33,7 +33,11 @@ use serde::{Deserialize, Serialize};
 /// The optional last term shifts the potential to zero at the cut-off radius.
 /// See <https://doi.org/dscmwg> for more information.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(deny_unknown_fields)
+)]
 pub struct ReactionField {
     /// Relative permittivity outside the cut-off i.e. the surroundings.
     #[cfg_attr(feature = "serde", serde(alias = "epsr_out"))]
