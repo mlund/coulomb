@@ -372,7 +372,14 @@ impl<const C: i32, const D: i32> ShortRangeFunction for Poisson<C, D> {
             let d2qpdq2 = -4.0 * s.reduced_kappa_squared * exp2kq * s.yukawa_denom;
             let d3qpdq3 =
                 -8.0 * s.reduced_kappa_squared * s.reduced_kappa * exp2kq * s.yukawa_denom;
-            (qp, dqpdq, d2qpdq2, d3qpdq3, Self::d2sdqp2(qp), Self::dsdqp(qp))
+            (
+                qp,
+                dqpdq,
+                d2qpdq2,
+                d3qpdq3,
+                Self::d2sdqp2(qp),
+                Self::dsdqp(qp),
+            )
         } else {
             (q, 1.0, 0.0, 0.0, 0.0, 0.0)
         };

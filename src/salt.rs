@@ -65,19 +65,19 @@ pub enum Salt {
     #[default]
     SodiumChloride,
     /// Calcium chloride, CaCl₂
-    #[cfg_attr(feature = "serde", serde(rename = "CaCl₂"))]
+    #[cfg_attr(feature = "serde", serde(rename = "CaCl2", alias = "CaCl₂"))]
     CalciumChloride,
     /// Calcium sulfate, CaSO₄
-    #[cfg_attr(feature = "serde", serde(rename = "CaSO₄"))]
+    #[cfg_attr(feature = "serde", serde(rename = "CaSO4", alias = "CaSO₄"))]
     CalciumSulfate,
     /// Potassium alum, KAl(SO₄)₂
-    #[cfg_attr(feature = "serde", serde(rename = "KAl(SO₄)₂"))]
+    #[cfg_attr(feature = "serde", serde(rename = "KAl(SO4)2", alias = "KAl(SO₄)₂"))]
     PotassiumAlum,
     /// Sodium sulfate, Na₂SO₄
-    #[cfg_attr(feature = "serde", serde(rename = "Na₂SO₄"))]
+    #[cfg_attr(feature = "serde", serde(rename = "Na2SO4", alias = "Na₂SO₄"))]
     SodiumSulfate,
     /// Lanthanum chloride, LaCl₃
-    #[cfg_attr(feature = "serde", serde(rename = "LaCl₃"))]
+    #[cfg_attr(feature = "serde", serde(rename = "LaCl3", alias = "LaCl₃"))]
     LanthanumChloride,
     /// Salt with custom valencies
     Custom(Vec<isize>),
