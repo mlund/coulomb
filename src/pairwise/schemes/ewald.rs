@@ -103,9 +103,8 @@ impl RealSpaceEwald {
     /// of the untruncated unit-charge kernel. It does not bound the total energy
     /// or force error of a system.
     pub fn new(cutoff: f64, accuracy: f64, debye_length: Option<f64>) -> Self {
-        let kappa = debye_length.map_or(0.0, |d| 1.0 / d);
-        let alpha = crate::reciprocal::parameters::ewald_alpha(cutoff, accuracy, kappa);
-        Self::from_alpha(cutoff, alpha, debye_length)
+        // One place picks the analytic α, shared with the reciprocal part
+        crate::reciprocal::EwaldSplitting::new(cutoff, accuracy, debye_length).real_space_scheme()
     }
 
     /// Internal constructor from explicit alpha (used by serde and `real_space_scheme`).
