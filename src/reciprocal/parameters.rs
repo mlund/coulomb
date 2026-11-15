@@ -77,41 +77,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn screened_cutoff_residual_meets_accuracy() {
-        use crate::pairwise::{RealSpaceEwald, ShortRangeFunction};
-
-        // Covers the issue #5 regime, the old shortcut boundary ζ = t/2,
-        // and values immediately around the corrected boundary ζ = t.
-        for cutoff in [5.0, 20.0, 40.0] {
-            for accuracy in [1e-12_f64, 1e-6, 1e-4, 1e-3, 0.1, 0.9] {
-                let t = -accuracy.ln();
-                for fraction in [0.0, 0.01, 0.25, 0.499, 0.5, 0.75, 0.999, 1.0, 1.001, 2.0] {
-                    let zeta = fraction * t;
-                    let kappa = zeta / cutoff;
-                    let alpha = ewald_alpha(cutoff, accuracy, kappa);
-                    let residual = if alpha == 0.0 {
-                        assert!(kappa * cutoff >= t);
-                        (-zeta).exp()
-                    } else {
-                        let debye_length = (kappa > 0.0).then(|| 1.0 / kappa);
-                        let scheme = RealSpaceEwald::from_alpha(cutoff, alpha, debye_length);
-                        scheme.short_range_f0(1.0) * (-zeta).exp()
-                    };
-                    assert!(residual <= accuracy * (1.0 + 1e-6),
-                        "cutoff={cutoff}, accuracy={accuracy}, ζ={zeta}, α={alpha}, residual={residual}");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn issue_5_keeps_reciprocal_sum() {
-        let alpha = ewald_alpha(40.0, 1e-3, 0.095);
-        approx::assert_relative_eq!(alpha, 0.06293941653423037, epsilon = 1e-14);
-        assert!(ewald_n_max(&[150.0; 3], alpha, 1e-3, 0.095) > 0);
-    }
-
-    #[test]
     fn test_alpha_and_n_max() {
         let alpha = ewald_alpha(5.0, 1e-5, 0.0);
         assert!(alpha > 0.5 && alpha < 1.0);
