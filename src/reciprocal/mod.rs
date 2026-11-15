@@ -43,6 +43,17 @@
 //!
 //! Parameters α and $n_\text{max}$ are derived automatically from the cutoff and
 //! accuracy target.
+//! When a separate real-space pair potential is needed, start from an [`EwaldSplitting`]:
+//! it owns α, so the pair potential and the reciprocal part cannot disagree.
+//!
+//! ```
+//! # use coulomb::reciprocal::*;
+//! let splitting = EwaldSplitting::new(5.0, 1e-5, Some(30.0));
+//! let real_space = splitting.real_space_scheme(); // pair potential for the real-space sum
+//! let ewald = EwaldReciprocal::from_splitting(&splitting, [10.0; 3], EwaldPolicy::PBC);
+//! assert_eq!(ewald.real_space_scheme(), real_space);
+//! ```
+//!
 //! For Yukawa, passing `optimize = true` to [`EwaldReciprocal::update_all`] can
 //! further reduce k-vectors by jointly scanning (α, $n_\text{max}$) against
 //! actual particle data (PBC only; no-op for Coulomb and IPBC).
@@ -50,6 +61,9 @@
 mod backend;
 mod kvectors;
 pub(crate) mod parameters;
+mod splitting;
+
+pub use splitting::EwaldSplitting;
 
 use core::f64::consts::PI;
 use kvectors::KVectors;
@@ -74,16 +88,6 @@ pub enum EwaldPolicy {
     IPBC,
 }
 
-/// How α and n_max follow a box or policy change.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Splitting {
-    /// Re-derived from `accuracy`, as at construction.
-    Analytic,
-    /// Optimized or user-set α: the real-space part keeps it, so α and the k-space cutoff
-    /// stay fixed and only n_max follows the box.
-    Fixed { k_cut: f64 },
-}
-
 /// Reciprocal-space Ewald summation for Coulomb and Yukawa potentials.
 ///
 /// Handles $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$ with
@@ -95,12 +99,8 @@ pub struct EwaldReciprocal {
     box_length: [f64; 3],
     two_pi_over_v: f64,
     four_pi_over_v: f64,
-    alpha: f64,
-    kappa: f64,
     n_max: u32,
-    splitting: Splitting,
-    real_cutoff: f64,
-    accuracy: f64,
+    splitting: EwaldSplitting,
     boundary: ConstantPermittivity,
     policy: EwaldPolicy,
     sk_re: Vec<f64>,
@@ -125,19 +125,27 @@ impl EwaldReciprocal {
         accuracy: f64,
         debye_length: Option<f64>,
     ) -> Self {
-        Self::build(
-            box_length,
-            real_cutoff,
-            accuracy,
-            debye_length.map_or(0.0, |d| 1.0 / d),
-            EwaldPolicy::PBC,
-        )
+        let splitting = EwaldSplitting::new(real_cutoff, accuracy, debye_length);
+        Self::from_splitting(&splitting, box_length, EwaldPolicy::PBC)
+    }
+
+    /// Construct from a splitting, so the real-space part can share its α via
+    /// [`EwaldSplitting::real_space_scheme`].
+    ///
+    /// Defaults to tinfoil boundaries; customize with [`Self::set_boundary`].
+    pub fn from_splitting(
+        splitting: &EwaldSplitting,
+        box_length: [f64; 3],
+        policy: EwaldPolicy,
+    ) -> Self {
+        Self::build_explicit(box_length, *splitting, splitting.n_max(&box_length), policy)
     }
 
     /// Construct with a fixed splitting parameter α; $n_\text{max}$ follows from `accuracy`.
-    ///
-    /// For when α comes from elsewhere, e.g. a fitted model; the real-space part must use
-    /// the same α, see [`Self::real_space_scheme`].
+    #[deprecated(
+        since = "0.5.4",
+        note = "use `from_splitting(&EwaldSplitting::with_alpha(..)?, box_length, policy)`"
+    )]
     pub fn with_alpha(
         box_length: [f64; 3],
         real_cutoff: f64,
@@ -145,52 +153,26 @@ impl EwaldReciprocal {
         debye_length: Option<f64>,
         alpha: f64,
     ) -> Self {
-        let kappa = debye_length.map_or(0.0, |d| 1.0 / d);
-        let n_max = parameters::ewald_n_max(&box_length, alpha, accuracy, kappa);
-        let mut ewald = Self::build_explicit(
-            box_length,
-            real_cutoff,
-            accuracy,
-            kappa,
-            alpha,
-            n_max,
-            EwaldPolicy::PBC,
-        );
-        ewald.splitting = Splitting::Fixed {
-            k_cut: parameters::ewald_k_cut(alpha, accuracy, kappa),
-        };
-        ewald
+        // Unvalidated, as before deprecation
+        let splitting = EwaldSplitting::fixed_alpha(real_cutoff, accuracy, debye_length, alpha);
+        Self::from_splitting(&splitting, box_length, EwaldPolicy::PBC)
+    }
+
+    /// The splitting in use: α, cutoff, accuracy and screening, after any `optimize`.
+    pub const fn splitting(&self) -> EwaldSplitting {
+        self.splitting
     }
 
     /// Replace `self` by `next`, keeping the boundary (build_explicit defaults to tinfoil).
-    fn adopt(&mut self, mut next: Self, splitting: Splitting) {
+    fn adopt(&mut self, mut next: Self) {
         next.boundary = self.boundary;
-        next.splitting = splitting;
         *self = next;
     }
 
-    /// Rebuild k-vectors for a new box or policy, following [`Splitting`].
+    /// Rebuild k-vectors for a new box or policy; the splitting decides n_max.
     fn rebuild(&mut self, box_length: [f64; 3], policy: EwaldPolicy) {
-        let next = match self.splitting {
-            Splitting::Analytic => Self::build(
-                box_length,
-                self.real_cutoff,
-                self.accuracy,
-                self.kappa,
-                policy,
-            ),
-            Splitting::Fixed { k_cut } => Self::build_explicit(
-                box_length,
-                self.real_cutoff,
-                self.accuracy,
-                self.kappa,
-                self.alpha,
-                // Tolerance: a virtual-volume perturbation must not add a shell
-                parameters::n_max_from_k_cut(k_cut, &box_length, 1e-6),
-                policy,
-            ),
-        };
-        self.adopt(next, self.splitting);
+        let next = Self::from_splitting(&self.splitting, box_length, policy);
+        self.adopt(next);
     }
 
     /// Jointly optimize α and n_max to minimize the number of k-vectors.
@@ -201,38 +183,27 @@ impl EwaldReciprocal {
     where
         T: Into<f64> + Copy,
     {
-        let alpha_max = parameters::ewald_alpha(self.real_cutoff, self.accuracy, self.kappa);
-        let n_max_analytic =
-            parameters::ewald_n_max(&self.box_length, alpha_max, self.accuracy, self.kappa);
+        let analytic = self.splitting.analytic();
+        let n_max_analytic = analytic.n_max(&self.box_length);
 
         // Yukawa screening strong enough to skip reciprocal sum entirely
         if n_max_analytic == 0 {
-            *self = Self::build_explicit(
+            self.adopt(Self::build_explicit(
                 self.box_length,
-                self.real_cutoff,
-                self.accuracy,
-                self.kappa,
-                alpha_max,
+                analytic,
                 0,
                 self.policy,
-            );
+            ));
             return;
         }
 
         let charges_f64: Vec<f64> = charges.iter().map(|&q| q.into()).collect();
         let sum_q2: f64 = charges_f64.iter().map(|q| q * q).sum();
-        let threshold = self.accuracy * sum_q2;
+        let threshold = analytic.accuracy * sum_q2;
 
         // Reference energy at analytic (α, n_max) — guaranteed accurate
-        let mut ref_ewald = Self::build_explicit(
-            self.box_length,
-            self.real_cutoff,
-            self.accuracy,
-            self.kappa,
-            alpha_max,
-            n_max_analytic,
-            self.policy,
-        );
+        let mut ref_ewald =
+            Self::build_explicit(self.box_length, analytic, n_max_analytic, self.policy);
         ref_ewald.update_all(x, y, z, charges, None, false);
         let e_recip_ref = ref_ewald.energy();
         let e_self_ref = ref_ewald.self_energy(&charges_f64);
@@ -256,30 +227,26 @@ impl EwaldReciprocal {
         // Step size Δη = 0.2 gives ~5–10 candidates for typical η_max ≈ 2–3.
         // Floor η_min = 0.8 is a hard safety net; in practice the sf0 ≤ 0.1 guard
         // (erfc(0.8) ≈ 0.26) breaks the loop well before this floor is reached.
-        let eta_max = alpha_max * self.real_cutoff;
+        let real_cutoff = analytic.real_cutoff;
+        let eta_max = analytic.alpha * real_cutoff;
         let eta_step = 0.2_f64;
         let eta_min = 0.8_f64;
-        let debye_length = self.debye_length();
 
         // Precompute charge sums for inline self-energy (avoids allocating per α)
         let q_tot: f64 = charges_f64.iter().sum();
         let two_pi_over_v = self.two_pi_over_v;
-        let kappa = self.kappa;
+        let kappa = analytic.kappa;
         let mut eta = eta_max - eta_step;
         while eta >= eta_min {
-            let alpha = eta / self.real_cutoff;
-
-            // Guard: sf0(1) ≤ 0.1 via existing ShortRangeFunction implementation
-            use crate::pairwise::ShortRangeFunction;
-            let real_scheme =
-                crate::pairwise::RealSpaceEwald::from_alpha(self.real_cutoff, alpha, debye_length);
-            if real_scheme.short_range_f0(1.0) > 0.1 {
+            let alpha = eta / real_cutoff;
+            let candidate = analytic.at_alpha(alpha);
+            if candidate.truncation_too_severe() {
                 break; // real-space truncation too severe
             }
+            let real_scheme = candidate.real_space_scheme();
 
             // Early exit: if even n_max=1 can't beat best, skip this α
-            let n_max_upper =
-                parameters::ewald_n_max(&self.box_length, alpha, self.accuracy, self.kappa);
+            let n_max_upper = candidate.n_max(&self.box_length);
             let kvecs_at_nmax1 = KVectors::new(self.box_length, 1, alpha, kappa, self.policy).len();
             if kvecs_at_nmax1 >= best_kvecs {
                 eta -= eta_step;
@@ -317,15 +284,7 @@ impl EwaldReciprocal {
             // Sweep n_max from 1 upward, find smallest where total energy converges
             let mut n_max = 1_u32;
             while n_max <= n_max_upper {
-                let mut tmp = Self::build_explicit(
-                    self.box_length,
-                    self.real_cutoff,
-                    self.accuracy,
-                    self.kappa,
-                    alpha,
-                    n_max,
-                    self.policy,
-                );
+                let mut tmp = Self::build_explicit(self.box_length, candidate, n_max, self.policy);
                 tmp.update_all(x, y, z, charges, None, false);
                 let e_recip = tmp.energy();
                 let e_total = e_real + e_recip + e_self;
@@ -347,8 +306,8 @@ impl EwaldReciprocal {
             eta -= eta_step;
         }
 
-        let k_cut = 2.0 * PI * f64::from(best.n_max) / parameters::longest_side(&best.box_length);
-        self.adopt(best, Splitting::Fixed { k_cut });
+        best.splitting = best.splitting.fixed(best.n_max, &best.box_length);
+        self.adopt(best);
     }
 
     /// Switch to a different Ewald policy (PBC or IPBC).
@@ -369,34 +328,10 @@ impl EwaldReciprocal {
         self.boundary = boundary;
     }
 
-    /// Internal constructor shared by all public constructors.
-    fn build(
-        box_length: [f64; 3],
-        real_cutoff: f64,
-        accuracy: f64,
-        kappa: f64,
-        policy: EwaldPolicy,
-    ) -> Self {
-        let alpha = parameters::ewald_alpha(real_cutoff, accuracy, kappa);
-        let n_max = parameters::ewald_n_max(&box_length, alpha, accuracy, kappa);
-        Self::build_explicit(
-            box_length,
-            real_cutoff,
-            accuracy,
-            kappa,
-            alpha,
-            n_max,
-            policy,
-        )
-    }
-
-    /// Constructor with explicit α and n_max (bypasses automatic parameter selection).
+    /// Constructor with an explicit n_max (bypasses the splitting's own choice).
     pub(crate) fn build_explicit(
         box_length: [f64; 3],
-        real_cutoff: f64,
-        accuracy: f64,
-        kappa: f64,
-        alpha: f64,
+        splitting: EwaldSplitting,
         n_max: u32,
         policy: EwaldPolicy,
     ) -> Self {
@@ -404,7 +339,7 @@ impl EwaldReciprocal {
         let volume = box_length[0] * box_length[1] * box_length[2];
         let two_pi_over_v = 2.0 * PI / volume;
         let four_pi_over_v = 4.0 * PI / volume;
-        let kvecs = KVectors::new(box_length, n_max, alpha, kappa, policy);
+        let kvecs = KVectors::new(box_length, n_max, splitting.alpha, splitting.kappa, policy);
         let n_k = kvecs.len();
         let (sk_re, sk_im, sk_ipbc) = match policy {
             EwaldPolicy::PBC => (vec![0.0; n_k], vec![0.0; n_k], Vec::new()),
@@ -415,12 +350,8 @@ impl EwaldReciprocal {
             box_length,
             two_pi_over_v,
             four_pi_over_v,
-            alpha,
-            kappa,
             n_max,
-            splitting: Splitting::Analytic,
-            real_cutoff,
-            accuracy,
+            splitting,
             boundary: crate::permittivity::METAL,
             policy,
             sk_re,
@@ -449,7 +380,7 @@ impl EwaldReciprocal {
         if let Some(box_length) = box_length {
             self.rebuild(box_length, self.policy);
         }
-        if optimize && self.kappa > 0.0 && self.policy == EwaldPolicy::PBC {
+        if optimize && self.splitting.kappa > 0.0 && self.policy == EwaldPolicy::PBC {
             self.optimize(x, y, z, charges);
             return;
         }
@@ -589,10 +520,10 @@ impl EwaldReciprocal {
             sum_q2 += q * q;
             q_tot += q;
         }
-        let alpha = self.alpha;
+        let alpha = self.splitting.alpha;
 
-        if self.kappa > 0.0 {
-            let kappa = self.kappa;
+        if self.splitting.kappa > 0.0 {
+            let kappa = self.splitting.kappa;
             let exp_term = (-kappa * kappa / (4.0 * alpha * alpha)).exp();
             let erfc_term = crate::math::erfc_x(kappa / (2.0 * alpha));
             let e_self = (-alpha / SQRT_PI).mul_add(exp_term, kappa / 2.0 * erfc_term) * sum_q2;
@@ -668,7 +599,7 @@ impl EwaldReciprocal {
 
     /// The splitting parameter $\alpha$ (for diagnostics/pairing with real-space Ewald).
     pub const fn alpha(&self) -> f64 {
-        self.alpha
+        self.splitting.alpha
     }
 
     /// The integer k-space cutoff $n_\text{max}$.
@@ -678,16 +609,12 @@ impl EwaldReciprocal {
 
     /// The real-space pair cutoff paired with this reciprocal instance.
     pub const fn real_cutoff(&self) -> f64 {
-        self.real_cutoff
+        self.splitting.real_cutoff
     }
 
     /// Debye screening length, or `None` for Coulomb.
     pub fn debye_length(&self) -> Option<f64> {
-        if self.kappa > 0.0 {
-            Some(1.0 / self.kappa)
-        } else {
-            None
-        }
+        self.splitting.debye_length()
     }
 
     /// Create the matching real-space Ewald pair potential.
@@ -696,11 +623,7 @@ impl EwaldReciprocal {
     /// splitting parameter $\alpha$, screening $\kappa$, and real-space cutoff
     /// as this reciprocal instance.
     pub fn real_space_scheme(&self) -> crate::pairwise::RealSpaceEwald {
-        crate::pairwise::RealSpaceEwald::from_alpha(
-            self.real_cutoff,
-            self.alpha,
-            self.debye_length(),
-        )
+        self.splitting.real_space_scheme()
     }
 }
 
@@ -1390,6 +1313,34 @@ mod tests {
         assert_eq!(ewald.n_max(), n_max);
     }
 
+    /// After `optimize`, the reported splitting is the one the real-space part must use.
+    #[test]
+    fn optimized_splitting_rebuilds_the_same_instance() {
+        let (ewald, l_box, _) = optimized_cppm();
+        let rebuilt =
+            EwaldReciprocal::from_splitting(&ewald.splitting(), [l_box; 3], EwaldPolicy::PBC);
+        assert_eq!(rebuilt.alpha(), ewald.alpha());
+        assert_eq!(rebuilt.n_max(), ewald.n_max());
+        assert_eq!(rebuilt.num_k_vectors(), ewald.num_k_vectors());
+    }
+
+    /// Screening strong enough for n_max = 0 takes a separate `optimize` branch; it must not
+    /// reset a user-set boundary.
+    #[test]
+    fn optimize_without_k_vectors_keeps_boundary() {
+        let (x, y, z, q) = ([10.0, 12.0], [10.0, 10.0], [10.0, 10.0], [1.0, -1.0]);
+        let mut ewald = EwaldReciprocal::new([100.0; 3], 20.0, 1e-4, Some(1.0));
+        ewald.set_boundary(crate::permittivity::VACUUM);
+        let before = ewald.surface_energy(&x, &y, &z, &q);
+        assert!(
+            before != 0.0,
+            "precondition: vacuum boundary gives a surface term"
+        );
+        ewald.update_all(&x, &y, &z, &q, None, true);
+        assert_eq!(ewald.n_max(), 0);
+        assert_eq!(ewald.surface_energy(&x, &y, &z, &q), before);
+    }
+
     /// NPT applies many small rescalings; the k-space cutoff must not creep upwards.
     #[test]
     fn repeated_rescaling_returns_to_original_n_max() {
@@ -1410,10 +1361,16 @@ mod tests {
         assert_eq!(ewald.alpha(), alpha);
     }
 
+    /// Reciprocal part with the fixed α = 0.05 used by several tests.
+    fn fixed_alpha(box_length: [f64; 3]) -> EwaldReciprocal {
+        let splitting = EwaldSplitting::with_alpha(20.0, 1e-3, Some(30.0), 0.05).unwrap();
+        EwaldReciprocal::from_splitting(&splitting, box_length, EwaldPolicy::PBC)
+    }
+
     #[test]
     fn with_alpha_sets_alpha_and_analytic_n_max() {
         let (box_length, kappa) = ([100.0; 3], 1.0 / 30.0);
-        let ewald = EwaldReciprocal::with_alpha(box_length, 20.0, 1e-3, Some(30.0), 0.05);
+        let ewald = fixed_alpha(box_length);
         assert_eq!(ewald.alpha(), 0.05);
         assert_eq!(
             ewald.n_max(),
@@ -1425,9 +1382,9 @@ mod tests {
     #[test]
     fn rescaled_with_alpha_matches_fresh_build() {
         let (px, py, pz, q) = build_cppm_lattice(100.0, 2);
-        let mut ewald = EwaldReciprocal::with_alpha([100.0; 3], 20.0, 1e-3, Some(30.0), 0.05);
+        let mut ewald = fixed_alpha([100.0; 3]);
         ewald.update_all(&px, &py, &pz, &q, Some([100.5; 3]), false);
-        let mut fresh = EwaldReciprocal::with_alpha([100.5; 3], 20.0, 1e-3, Some(30.0), 0.05);
+        let mut fresh = fixed_alpha([100.5; 3]);
         fresh.update_all(&px, &py, &pz, &q, None, false);
         assert_eq!(
             ewald.n_max(),
@@ -1448,9 +1405,7 @@ mod tests {
             ("yukawa", |b| {
                 EwaldReciprocal::new(b, 20.0, 1e-4, Some(30.0))
             }),
-            ("fixed α", |b| {
-                EwaldReciprocal::with_alpha(b, 20.0, 1e-3, Some(30.0), 0.05)
-            }),
+            ("fixed α", fixed_alpha),
         ];
         for (name, build) in builders {
             for i in 0..=40 {
@@ -1469,7 +1424,8 @@ mod tests {
     fn analytic_set_policy_matches_fresh_build() {
         let mut ewald = EwaldReciprocal::new([100.0; 3], 20.0, 1e-4, Some(30.0));
         ewald.set_policy(EwaldPolicy::IPBC);
-        let fresh = EwaldReciprocal::build([100.0; 3], 20.0, 1e-4, 1.0 / 30.0, EwaldPolicy::IPBC);
+        let splitting = EwaldSplitting::new(20.0, 1e-4, Some(30.0));
+        let fresh = EwaldReciprocal::from_splitting(&splitting, [100.0; 3], EwaldPolicy::IPBC);
         assert_eq!(ewald.n_max(), fresh.n_max());
         assert_eq!(ewald.alpha(), fresh.alpha());
     }
