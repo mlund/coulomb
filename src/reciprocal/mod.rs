@@ -74,6 +74,16 @@ pub enum EwaldPolicy {
     IPBC,
 }
 
+/// How α and n_max follow a box or policy change.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Splitting {
+    /// Re-derived from `accuracy`, as at construction.
+    Analytic,
+    /// Optimized or user-set α: the real-space part keeps it, so α and the k-space cutoff
+    /// stay fixed and only n_max follows the box.
+    Fixed { k_cut: f64 },
+}
+
 /// Reciprocal-space Ewald summation for Coulomb and Yukawa potentials.
 ///
 /// Handles $U_\text{recip}$, $U_\text{self}$, and $U_\text{surface}$ with
@@ -88,6 +98,7 @@ pub struct EwaldReciprocal {
     alpha: f64,
     kappa: f64,
     n_max: u32,
+    splitting: Splitting,
     real_cutoff: f64,
     accuracy: f64,
     boundary: ConstantPermittivity,
@@ -116,6 +127,65 @@ impl EwaldReciprocal {
             debye_length.map_or(0.0, |d| 1.0 / d),
             EwaldPolicy::PBC,
         )
+    }
+
+    /// Construct with a fixed splitting parameter α; $n_\text{max}$ follows from `accuracy`.
+    ///
+    /// For when α comes from elsewhere, e.g. a fitted model; the real-space part must use
+    /// the same α, see [`Self::real_space_scheme`].
+    pub fn with_alpha(
+        box_length: [f64; 3],
+        real_cutoff: f64,
+        accuracy: f64,
+        debye_length: Option<f64>,
+        alpha: f64,
+    ) -> Self {
+        let kappa = debye_length.map_or(0.0, |d| 1.0 / d);
+        let n_max = parameters::ewald_n_max(&box_length, alpha, accuracy, kappa);
+        let mut ewald = Self::build_explicit(
+            box_length,
+            real_cutoff,
+            accuracy,
+            kappa,
+            alpha,
+            n_max,
+            EwaldPolicy::PBC,
+        );
+        ewald.splitting = Splitting::Fixed {
+            k_cut: parameters::ewald_k_cut(alpha, accuracy, kappa),
+        };
+        ewald
+    }
+
+    /// Replace `self` by `next`, keeping the boundary (build_explicit defaults to tinfoil).
+    fn adopt(&mut self, mut next: Self, splitting: Splitting) {
+        next.boundary = self.boundary;
+        next.splitting = splitting;
+        *self = next;
+    }
+
+    /// Rebuild k-vectors for a new box or policy, following [`Splitting`].
+    fn rebuild(&mut self, box_length: [f64; 3], policy: EwaldPolicy) {
+        let next = match self.splitting {
+            Splitting::Analytic => Self::build(
+                box_length,
+                self.real_cutoff,
+                self.accuracy,
+                self.kappa,
+                policy,
+            ),
+            Splitting::Fixed { k_cut } => Self::build_explicit(
+                box_length,
+                self.real_cutoff,
+                self.accuracy,
+                self.kappa,
+                self.alpha,
+                // Tolerance: a virtual-volume perturbation must not add a shell
+                parameters::n_max_from_k_cut(k_cut, &box_length, 1e-6),
+                policy,
+            ),
+        };
+        self.adopt(next, self.splitting);
     }
 
     /// Jointly optimize α and n_max to minimize the number of k-vectors.
@@ -272,10 +342,8 @@ impl EwaldReciprocal {
             eta -= eta_step;
         }
 
-        // Preserve the user's boundary setting — build_explicit defaults to tinfoil
-        let boundary = self.boundary;
-        *self = best;
-        self.boundary = boundary;
+        let k_cut = 2.0 * PI * f64::from(best.n_max) / parameters::longest_side(&best.box_length);
+        self.adopt(best, Splitting::Fixed { k_cut });
     }
 
     /// Switch to a different Ewald policy (PBC or IPBC).
@@ -285,13 +353,7 @@ impl EwaldReciprocal {
         if policy == self.policy {
             return;
         }
-        *self = Self::build(
-            self.box_length,
-            self.real_cutoff,
-            self.accuracy,
-            self.kappa,
-            policy,
-        );
+        self.rebuild(self.box_length, policy);
     }
 
     /// Set the boundary permittivity.
@@ -351,6 +413,7 @@ impl EwaldReciprocal {
             alpha,
             kappa,
             n_max,
+            splitting: Splitting::Analytic,
             real_cutoff,
             accuracy,
             boundary: crate::permittivity::METAL,
@@ -363,7 +426,9 @@ impl EwaldReciprocal {
 
     /// Recompute all structure factors from scratch. $O(N \times N_k)$.
     ///
-    /// If `box_length` is `Some`, rebuilds α, $n_\text{max}$, and k-vectors first.
+    /// If `box_length` is `Some`, rebuilds the k-vectors first: default parameters are
+    /// re-derived from `accuracy`, while an optimized or user-set α is kept along with its
+    /// k-space cutoff.
     /// If `optimize` is true and κ > 0 (Yukawa), jointly optimizes α and $n_\text{max}$
     /// to minimize the number of k-vectors while preserving energy accuracy.
     /// No-op for pure Coulomb (κ = 0) or IPBC policy.
@@ -377,15 +442,7 @@ impl EwaldReciprocal {
         optimize: bool,
     ) {
         if let Some(box_length) = box_length {
-            let boundary = self.boundary;
-            *self = Self::build(
-                box_length,
-                self.real_cutoff,
-                self.accuracy,
-                self.kappa,
-                self.policy,
-            );
-            self.boundary = boundary;
+            self.rebuild(box_length, self.policy);
         }
         if optimize && self.kappa > 0.0 && self.policy == EwaldPolicy::PBC {
             self.optimize(x, y, z, charges);
@@ -1293,5 +1350,122 @@ mod tests {
             kvecs_before,
             "optimize should be no-op for Coulomb"
         );
+    }
+
+    /// Yukawa CPPM lattice where `optimize` lowers α below the analytic value.
+    fn optimized_cppm() -> (EwaldReciprocal, f64, [Vec<f64>; 4]) {
+        let l_box = 100.0;
+        let (px, py, pz, charges) = build_cppm_lattice(l_box, 2);
+        let mut ewald = EwaldReciprocal::new([l_box; 3], l_box / 2.0 - 0.01, 1e-3, Some(30.0));
+        let alpha_analytic = ewald.alpha();
+        ewald.update_all(&px, &py, &pz, &charges, None, true);
+        assert!(
+            ewald.alpha() < alpha_analytic,
+            "precondition: optimize must lower α"
+        );
+        (ewald, l_box, [px, py, pz, charges])
+    }
+
+    /// The real-space part keeps the optimized α, so a box change must too.
+    #[test]
+    fn box_rescale_keeps_optimized_alpha() {
+        let (mut ewald, l_box, [px, py, pz, q]) = optimized_cppm();
+        let alpha = ewald.alpha();
+        ewald.update_all(&px, &py, &pz, &q, Some([l_box * 1.01; 3]), false);
+        assert_eq!(ewald.alpha(), alpha);
+    }
+
+    /// A virtual volume move perturbs L by ~1e-8; changing n_max there would put
+    /// k-space truncation noise into ΔU.
+    #[test]
+    fn tiny_box_perturbation_keeps_optimized_n_max() {
+        let (mut ewald, l_box, [px, py, pz, q]) = optimized_cppm();
+        let n_max = ewald.n_max();
+        ewald.update_all(&px, &py, &pz, &q, Some([l_box * (1.0 + 1e-8); 3]), false);
+        assert_eq!(ewald.n_max(), n_max);
+    }
+
+    /// NPT applies many small rescalings; the k-space cutoff must not creep upwards.
+    #[test]
+    fn repeated_rescaling_returns_to_original_n_max() {
+        let (mut ewald, l_box, [px, py, pz, q]) = optimized_cppm();
+        let n_max = ewald.n_max();
+        for _ in 0..50 {
+            ewald.update_all(&px, &py, &pz, &q, Some([l_box * 1.003; 3]), false);
+            ewald.update_all(&px, &py, &pz, &q, Some([l_box; 3]), false);
+        }
+        assert_eq!(ewald.n_max(), n_max);
+    }
+
+    #[test]
+    fn set_policy_keeps_optimized_alpha() {
+        let (mut ewald, _, _) = optimized_cppm();
+        let alpha = ewald.alpha();
+        ewald.set_policy(EwaldPolicy::IPBC);
+        assert_eq!(ewald.alpha(), alpha);
+    }
+
+    #[test]
+    fn with_alpha_sets_alpha_and_analytic_n_max() {
+        let (box_length, kappa) = ([100.0; 3], 1.0 / 30.0);
+        let ewald = EwaldReciprocal::with_alpha(box_length, 20.0, 1e-3, Some(30.0), 0.05);
+        assert_eq!(ewald.alpha(), 0.05);
+        assert_eq!(
+            ewald.n_max(),
+            parameters::ewald_n_max(&box_length, 0.05, 1e-3, kappa)
+        );
+    }
+
+    /// After rescaling, the energy equals that of a fresh build at the new box.
+    #[test]
+    fn rescaled_with_alpha_matches_fresh_build() {
+        let (px, py, pz, q) = build_cppm_lattice(100.0, 2);
+        let mut ewald = EwaldReciprocal::with_alpha([100.0; 3], 20.0, 1e-3, Some(30.0), 0.05);
+        ewald.update_all(&px, &py, &pz, &q, Some([100.5; 3]), false);
+        let mut fresh = EwaldReciprocal::with_alpha([100.5; 3], 20.0, 1e-3, Some(30.0), 0.05);
+        fresh.update_all(&px, &py, &pz, &q, None, false);
+        assert_eq!(
+            ewald.n_max(),
+            fresh.n_max(),
+            "precondition: same k-vector shells"
+        );
+        assert_relative_eq!(ewald.energy(), fresh.energy(), max_relative = 1e-12);
+    }
+
+    /// Expanding the box must keep the accuracy target: n_max and α match a fresh build, both
+    /// for default parameters (plain Coulomb and Yukawa NPT) and for a fixed α.
+    #[test]
+    fn rescale_matches_fresh_build() {
+        let (px, py, pz, q) = build_cppm_lattice(100.0, 2);
+        type Build = fn([f64; 3]) -> EwaldReciprocal;
+        let builders: [(&str, Build); 3] = [
+            ("coulomb", |b| EwaldReciprocal::new(b, 20.0, 1e-4, None)),
+            ("yukawa", |b| {
+                EwaldReciprocal::new(b, 20.0, 1e-4, Some(30.0))
+            }),
+            ("fixed α", |b| {
+                EwaldReciprocal::with_alpha(b, 20.0, 1e-3, Some(30.0), 0.05)
+            }),
+        ];
+        for (name, build) in builders {
+            for i in 0..=40 {
+                let l = 100.0 * (1.0 + 0.0025 * f64::from(i));
+                let mut ewald = build([100.0; 3]);
+                ewald.update_all(&px, &py, &pz, &q, Some([l; 3]), false);
+                let fresh = build([l; 3]);
+                assert_eq!(ewald.n_max(), fresh.n_max(), "{name}, L = {l}");
+                assert_eq!(ewald.alpha(), fresh.alpha(), "{name}");
+            }
+        }
+    }
+
+    /// Default parameters re-derive n_max when switching policy, as before.
+    #[test]
+    fn analytic_set_policy_matches_fresh_build() {
+        let mut ewald = EwaldReciprocal::new([100.0; 3], 20.0, 1e-4, Some(30.0));
+        ewald.set_policy(EwaldPolicy::IPBC);
+        let fresh = EwaldReciprocal::build([100.0; 3], 20.0, 1e-4, 1.0 / 30.0, EwaldPolicy::IPBC);
+        assert_eq!(ewald.n_max(), fresh.n_max());
+        assert_eq!(ewald.alpha(), fresh.alpha());
     }
 }
