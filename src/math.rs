@@ -31,10 +31,11 @@ use approx::assert_relative_eq;
 /// t = 1 / (1 + px)
 /// |epsilon(x)| <= 1.5 * 10^-7
 ///
-/// # Warning
-/// Needs modification if x < 0
+/// The fit holds for x ≥ 0 only, which every unscreened caller satisfies; use
+/// [`erfc_signed`] where the argument can be negative.
 #[inline]
 pub(crate) fn erfc_x(x: f64) -> f64 {
+    debug_assert!(x >= 0.0, "erfc_x needs x ≥ 0, got {x}; use erfc_signed");
     let t = 1.0 / (1.0 + 0.3275911 * x);
     let a1 = 0.254829592;
     let a2 = -0.284496736;
@@ -42,6 +43,17 @@ pub(crate) fn erfc_x(x: f64) -> f64 {
     let a4 = -1.453152027;
     let a5 = 1.061405429;
     t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5)))) * f64::exp(-x * x)
+}
+
+/// erfc for any sign, via erfc(−x) = 2 − erfc(x). The screened real-space Ewald term
+/// erfc(ηq − ζ/2η) is negative at short range.
+#[inline]
+pub(crate) fn erfc_signed(x: f64) -> f64 {
+    if x < 0.0 {
+        2.0 - erfc_x(-x)
+    } else {
+        erfc_x(x)
+    }
 }
 
 /// Approximation of erf-function, see `erfc_x` for details
@@ -126,6 +138,22 @@ pub(crate) fn _q_pochhammer_symbol_second_derivative(q: f64, l: i32, p: i32) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn erfc_signed_negative_argument() {
+        // Reference values 1 + erf(0.5), 1 + erf(2)
+        approx::assert_abs_diff_eq!(erfc_signed(-0.5), 1.520_499_877_8, epsilon = 2e-7);
+        approx::assert_abs_diff_eq!(erfc_signed(-2.0), 1.995_322_265_0, epsilon = 2e-7);
+        assert_eq!(erfc_signed(0.7), erfc_x(0.7));
+    }
+
+    /// The x ≥ 0 fit is silently wrong below zero, so debug builds refuse it.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "erfc_x needs x ≥ 0")]
+    fn erfc_x_rejects_negative_argument() {
+        erfc_x(-0.5);
+    }
 
     #[test]
     fn test_q_pochhammer_symbol() {

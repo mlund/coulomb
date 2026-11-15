@@ -49,17 +49,26 @@ pub(crate) fn ewald_n_max(box_length: &[f64; 3], alpha: f64, accuracy: f64, kapp
         "accuracy must be in (0, 1)"
     );
     debug_assert!(kappa >= 0.0, "kappa must be non-negative");
-    if alpha == 0.0 {
+    n_max_from_k_cut(ewald_k_cut(alpha, accuracy, kappa), box_length, 0.0)
+}
+
+/// n_max = ⌈k_c · L_max / 2π − tolerance⌉, at least 1; 0 when k_c = 0.
+pub(crate) fn n_max_from_k_cut(k_cut: f64, box_length: &[f64; 3], tolerance: f64) -> u32 {
+    if k_cut == 0.0 {
         return 0;
     }
-    let l_max = box_length[0].max(box_length[1]).max(box_length[2]);
-    let neg_ln_eps = -accuracy.ln();
-    let k_c_sq = (4.0 * alpha * alpha * neg_ln_eps - kappa * kappa).max(0.0);
-    if k_c_sq == 0.0 {
-        return 0;
-    }
-    let n_max_f = k_c_sq.sqrt() * l_max / (2.0 * PI);
-    (n_max_f.ceil() as u32).max(1)
+    ((k_cut * longest_side(box_length) / (2.0 * PI) - tolerance).ceil() as u32).max(1)
+}
+
+pub(crate) fn longest_side(box_length: &[f64; 3]) -> f64 {
+    box_length[0].max(box_length[1]).max(box_length[2])
+}
+
+/// k-space cutoff k_c = √max(4α²(−ln ε) − κ², 0); zero for α = 0.
+pub(crate) fn ewald_k_cut(alpha: f64, accuracy: f64, kappa: f64) -> f64 {
+    (4.0 * alpha * alpha * -accuracy.ln() - kappa * kappa)
+        .max(0.0)
+        .sqrt()
 }
 
 #[cfg(test)]

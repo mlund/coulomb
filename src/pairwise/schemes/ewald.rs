@@ -17,7 +17,7 @@
 
 #[cfg(test)]
 use crate::debye_length::DebyeLength;
-use crate::math::erfc_x;
+use crate::math::{erfc_signed, erfc_x};
 use crate::pairwise::{SelfEnergyPrefactors, ShortRangeFunction};
 #[cfg(test)]
 use approx::assert_relative_eq;
@@ -147,7 +147,7 @@ impl ShortRangeFunction for RealSpaceEwald {
     fn short_range_f0(&self, q: f64) -> f64 {
         if let Some(zeta) = self.zeta {
             0.5 * (erfc_x(self.eta * q + zeta / (2.0 * self.eta)) * f64::exp(2.0 * zeta * q)
-                + erfc_x(self.eta * q - zeta / (2.0 * self.eta)))
+                + erfc_signed(self.eta * q - zeta / (2.0 * self.eta)))
         } else {
             erfc_x(self.eta * q)
         }
