@@ -113,7 +113,7 @@ impl EwaldReciprocal {
     ///
     /// `accuracy` bounds the dimensionless real-space pair-potential residual
     /// `real_cutoff * u_real(real_cutoff)` of the untruncated unit-charge kernel
-    /// and sets reciprocal Gaussian damping.
+    /// and controls the reciprocal-space cutoff.
     /// It does not guarantee a total energy or force error for arbitrary systems.
     ///
     /// Pass `debye_length: None` for Coulomb, `Some(λ_D)` for Yukawa.
