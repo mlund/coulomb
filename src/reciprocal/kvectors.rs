@@ -20,7 +20,10 @@ impl KVectors {
         kappa: f64,
         policy: EwaldPolicy,
     ) -> Self {
-        debug_assert!(alpha > 0.0, "alpha must be positive");
+        debug_assert!(
+            alpha > 0.0 || (alpha == 0.0 && n_max == 0 && kappa > 0.0),
+            "alpha must be positive unless screened reciprocal space is empty"
+        );
         debug_assert!(kappa >= 0.0, "kappa must be non-negative");
         debug_assert!(
             box_length.iter().all(|&l| l > 0.0),

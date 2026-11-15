@@ -149,6 +149,10 @@ impl ShortRangeFunction for RealSpaceEwald {
 
     #[inline]
     fn short_range_f0(&self, q: f64) -> f64 {
+        // At α = 0 the entire screened kernel stays in real space.
+        if self.eta == 0.0 {
+            return 1.0;
+        }
         if let Some(zeta) = self.zeta {
             0.5 * (erfc_x(self.eta * q + zeta / (2.0 * self.eta)) * f64::exp(2.0 * zeta * q)
                 + erfc_signed(self.eta * q - zeta / (2.0 * self.eta)))
@@ -158,6 +162,10 @@ impl ShortRangeFunction for RealSpaceEwald {
     }
 
     fn short_range_f1(&self, q: f64) -> f64 {
+        // At α = 0 the entire screened kernel stays in real space.
+        if self.eta == 0.0 {
+            return 0.0;
+        }
         if let Some(zeta) = self.zeta {
             let exp_c = f64::exp(-(self.eta * q - zeta / (2.0 * self.eta)).powi(2));
             let erfc_c = erfc_x(self.eta * q + zeta / (2.0 * self.eta));
@@ -168,6 +176,10 @@ impl ShortRangeFunction for RealSpaceEwald {
     }
 
     fn short_range_f2(&self, q: f64) -> f64 {
+        // At α = 0 the entire screened kernel stays in real space.
+        if self.eta == 0.0 {
+            return 0.0;
+        }
         if let Some(zeta) = self.zeta {
             let exp_c = f64::exp(-(self.eta * q - zeta / (2.0 * self.eta)).powi(2));
             let erfc_c = erfc_x(self.eta * q + zeta / (2.0 * self.eta));
@@ -181,6 +193,10 @@ impl ShortRangeFunction for RealSpaceEwald {
     }
 
     fn short_range_f3(&self, q: f64) -> f64 {
+        // At α = 0 the entire screened kernel stays in real space.
+        if self.eta == 0.0 {
+            return 0.0;
+        }
         if let Some(zeta) = self.zeta {
             let exp_c = f64::exp(-(self.eta * q - zeta / (2.0 * self.eta)).powi(2));
             let erfc_c = erfc_x(self.eta * q + zeta / (2.0 * self.eta));
@@ -200,6 +216,12 @@ impl ShortRangeFunction for RealSpaceEwald {
     }
 
     fn self_energy_prefactors(&self) -> SelfEnergyPrefactors {
+        if self.eta == 0.0 {
+            return SelfEnergyPrefactors {
+                monopole: Some(0.0),
+                dipole: Some(0.0),
+            };
+        }
         let (c1, c2) = if let Some(zeta) = self.zeta {
             let c1 = -self.eta / Self::SQRT_PI
                 * (f64::exp(-zeta.powi(2) / 4.0 / self.eta.powi(2))
