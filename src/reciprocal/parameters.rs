@@ -3,9 +3,10 @@ use core::f64::consts::PI;
 /// Ewald splitting parameter α from cutoff and accuracy target.
 ///
 /// Coulomb (κ = 0): α = √(−ln ε) / r_c (Kolafa–Perram).
-/// Yukawa (κ > 0): uses the tighter Pålsson–Tornberg bound
-/// ([arXiv:1911.04875](https://arxiv.org/abs/1911.04875)),
-/// returning 0 when the reciprocal sum can be skipped entirely.
+/// Yukawa (κ > 0): bounds the dimensionless real-space cutoff residual
+/// r_c u_real(r_c) of the untruncated unit-charge kernel by ε,
+/// returning 0 only when exp(−κr_c) ≤ ε.
+/// This is a pair-potential bound, not a system energy or force error bound.
 pub(crate) fn ewald_alpha(cutoff: f64, accuracy: f64, kappa: f64) -> f64 {
     debug_assert!(cutoff > 0.0, "cutoff must be positive");
     debug_assert!(
@@ -17,21 +18,21 @@ pub(crate) fn ewald_alpha(cutoff: f64, accuracy: f64, kappa: f64) -> f64 {
     if kappa == 0.0 {
         return neg_ln_eps.sqrt() / cutoff;
     }
-    // Pålsson–Tornberg bound: exp(-(αr_c + κ/(2α))²) = ε is tighter than
-    // Kolafa–Perram because it includes the screening term κ/(2α) that adds
-    // to the Gaussian damping, yielding a smaller α and thus fewer k-vectors.
-    // Substituting u = αr_c gives quadratic u² - √(-ln ε)·u + κr_c/2 = 0.
-    let discriminant = neg_ln_eps - 2.0 * kappa * cutoff;
-    if discriminant <= 0.0 {
-        // 2κr_c ≥ -ln ε: Yukawa potential decays fast enough that the
-        // real-space sum alone achieves the target accuracy — no reciprocal sum needed.
+    let zeta = kappa * cutoff;
+    if zeta >= neg_ln_eps {
+        // The bare Yukawa cutoff residual exp(−κr_c) already meets ε.
         return 0.0;
     }
-    // Upper root: gives a larger α (more work in reciprocal space) but ensures
-    // the real-space error bound is satisfied. The lower root would under-damp
-    // real space, violating the accuracy target.
-    let u = (neg_ln_eps.sqrt() + discriminant.sqrt()) / 2.0;
-    u / cutoff
+    // Salin & Caillol, JCP 113, 10459 (2000), Eq. 2.17:
+    // R = [exp(ζ) erfc(η + b) + exp(−ζ) erfc(η − b)] / 2,
+    // where η = αr_c and b = ζ/(2η). For η ≥ b, erfc(x) ≤ exp(−x²)
+    // gives R ≤ exp(−η² − b²). Solve η² + ζ²/(4η²) = −ln ε,
+    // taking the larger root so both erfc arguments are nonnegative.
+    // Normalize the discriminant to avoid squaring −ln ε.
+    let ratio = zeta / neg_ln_eps;
+    let discriminant = (1.0 - ratio) * (1.0 + ratio);
+    let eta = neg_ln_eps.sqrt() * (0.5 * (1.0 + discriminant.sqrt())).sqrt();
+    eta / cutoff
 }
 
 /// Reciprocal-space integer cutoff n_max for given Ewald parameters.
@@ -74,6 +75,41 @@ pub(crate) fn ewald_k_cut(alpha: f64, accuracy: f64, kappa: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screened_cutoff_residual_meets_accuracy() {
+        use crate::pairwise::{RealSpaceEwald, ShortRangeFunction};
+
+        // Covers the issue #5 regime, the old shortcut boundary ζ = t/2,
+        // and values immediately around the corrected boundary ζ = t.
+        for cutoff in [5.0, 20.0, 40.0] {
+            for accuracy in [1e-12_f64, 1e-6, 1e-4, 1e-3, 0.1, 0.9] {
+                let t = -accuracy.ln();
+                for fraction in [0.0, 0.01, 0.25, 0.499, 0.5, 0.75, 0.999, 1.0, 1.001, 2.0] {
+                    let zeta = fraction * t;
+                    let kappa = zeta / cutoff;
+                    let alpha = ewald_alpha(cutoff, accuracy, kappa);
+                    let residual = if alpha == 0.0 {
+                        assert!(kappa * cutoff >= t);
+                        (-zeta).exp()
+                    } else {
+                        let debye_length = (kappa > 0.0).then(|| 1.0 / kappa);
+                        let scheme = RealSpaceEwald::from_alpha(cutoff, alpha, debye_length);
+                        scheme.short_range_f0(1.0) * (-zeta).exp()
+                    };
+                    assert!(residual <= accuracy * (1.0 + 1e-6),
+                        "cutoff={cutoff}, accuracy={accuracy}, ζ={zeta}, α={alpha}, residual={residual}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn issue_5_keeps_reciprocal_sum() {
+        let alpha = ewald_alpha(40.0, 1e-3, 0.095);
+        approx::assert_relative_eq!(alpha, 0.06293941653423037, epsilon = 1e-14);
+        assert!(ewald_n_max(&[150.0; 3], alpha, 1e-3, 0.095) > 0);
+    }
 
     #[test]
     fn test_alpha_and_n_max() {
