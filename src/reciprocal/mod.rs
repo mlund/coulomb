@@ -111,6 +111,11 @@ pub struct EwaldReciprocal {
 impl EwaldReciprocal {
     /// Construct with automatic parameter selection for target accuracy.
     ///
+    /// `accuracy` bounds the dimensionless real-space pair-potential residual
+    /// `real_cutoff * u_real(real_cutoff)` of the untruncated unit-charge kernel
+    /// and controls the reciprocal-space cutoff.
+    /// It does not guarantee a total energy or force error for arbitrary systems.
+    ///
     /// Pass `debye_length: None` for Coulomb, `Some(λ_D)` for Yukawa.
     /// Defaults to tinfoil boundaries and PBC; customize with
     /// [`Self::set_policy`] and [`Self::set_boundary`].

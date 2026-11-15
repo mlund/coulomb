@@ -98,6 +98,10 @@ impl RealSpaceEwald {
     const SQRT_PI: f64 = 1.7724538509055159;
 
     /// Construct from cutoff and accuracy target. Derives α automatically.
+    ///
+    /// `accuracy` bounds the dimensionless cutoff residual `cutoff * u_real(cutoff)`
+    /// of the untruncated unit-charge kernel. It does not bound the total energy
+    /// or force error of a system.
     pub fn new(cutoff: f64, accuracy: f64, debye_length: Option<f64>) -> Self {
         let kappa = debye_length.map_or(0.0, |d| 1.0 / d);
         let alpha = crate::reciprocal::parameters::ewald_alpha(cutoff, accuracy, kappa);

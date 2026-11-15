@@ -3,9 +3,10 @@ use core::f64::consts::PI;
 /// Ewald splitting parameter α from cutoff and accuracy target.
 ///
 /// Coulomb (κ = 0): α = √(−ln ε) / r_c (Kolafa–Perram).
-/// Yukawa (κ > 0): uses the tighter Pålsson–Tornberg bound
-/// ([arXiv:1911.04875](https://arxiv.org/abs/1911.04875)),
-/// returning 0 when the reciprocal sum can be skipped entirely.
+/// Yukawa (κ > 0): bounds the dimensionless real-space cutoff residual
+/// r_c u_real(r_c) of the untruncated unit-charge kernel by ε,
+/// returning 0 only when exp(−κr_c) ≤ ε.
+/// This is a pair-potential bound, not a system energy or force error bound.
 pub(crate) fn ewald_alpha(cutoff: f64, accuracy: f64, kappa: f64) -> f64 {
     debug_assert!(cutoff > 0.0, "cutoff must be positive");
     debug_assert!(
@@ -17,21 +18,21 @@ pub(crate) fn ewald_alpha(cutoff: f64, accuracy: f64, kappa: f64) -> f64 {
     if kappa == 0.0 {
         return neg_ln_eps.sqrt() / cutoff;
     }
-    // Pålsson–Tornberg bound: exp(-(αr_c + κ/(2α))²) = ε is tighter than
-    // Kolafa–Perram because it includes the screening term κ/(2α) that adds
-    // to the Gaussian damping, yielding a smaller α and thus fewer k-vectors.
-    // Substituting u = αr_c gives quadratic u² - √(-ln ε)·u + κr_c/2 = 0.
-    let discriminant = neg_ln_eps - 2.0 * kappa * cutoff;
-    if discriminant <= 0.0 {
-        // 2κr_c ≥ -ln ε: Yukawa potential decays fast enough that the
-        // real-space sum alone achieves the target accuracy — no reciprocal sum needed.
+    let zeta = kappa * cutoff;
+    if zeta >= neg_ln_eps {
+        // The bare Yukawa cutoff residual exp(−κr_c) already meets ε.
         return 0.0;
     }
-    // Upper root: gives a larger α (more work in reciprocal space) but ensures
-    // the real-space error bound is satisfied. The lower root would under-damp
-    // real space, violating the accuracy target.
-    let u = (neg_ln_eps.sqrt() + discriminant.sqrt()) / 2.0;
-    u / cutoff
+    // Salin & Caillol, JCP 113, 10459 (2000), Eq. 2.17:
+    // R = [exp(ζ) erfc(η + b) + exp(−ζ) erfc(η − b)] / 2,
+    // where η = αr_c and b = ζ/(2η). For η ≥ b, erfc(x) ≤ exp(−x²)
+    // gives R ≤ exp(−η² − b²). Solve η² + ζ²/(4η²) = −ln ε,
+    // taking the larger root so both erfc arguments are nonnegative.
+    // Normalize the discriminant to avoid squaring −ln ε.
+    let ratio = zeta / neg_ln_eps;
+    let discriminant = (1.0 - ratio) * (1.0 + ratio);
+    let eta = neg_ln_eps.sqrt() * (0.5 * (1.0 + discriminant.sqrt())).sqrt();
+    eta / cutoff
 }
 
 /// Reciprocal-space integer cutoff n_max for given Ewald parameters.
