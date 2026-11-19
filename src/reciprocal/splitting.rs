@@ -9,8 +9,8 @@ use core::f64::consts::PI;
 enum Mode {
     /// Re-derived from `accuracy`, as at construction.
     Analytic,
-    /// Optimized or user-set α: the real-space part keeps it, so α and the k-space cutoff
-    /// stay fixed and only n_max follows the box.
+    /// Optimized or user-set α: the real-space part keeps it. `k_cut` sets n_max when an
+    /// instance is built; box changes then keep that index set (see [`EwaldSplitting::rebuilt_n_max`]).
     Fixed { k_cut: f64 },
 }
 
@@ -21,7 +21,7 @@ enum Mode {
 /// [`EwaldReciprocal::from_splitting`](super::EwaldReciprocal::from_splitting).
 /// It needs no box, so the pair potential can be set up before the simulation cell exists.
 ///
-/// Equality also compares how n_max follows the box; compare [`Self::real_space_scheme`]s to
+/// Equality also compares how n_max is chosen; compare [`Self::real_space_scheme`]s to
 /// ask whether two splittings give the same pair potential.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EwaldSplitting {
@@ -132,15 +132,27 @@ impl EwaldSplitting {
         self.alpha > 0.0 && self.short_range_at_cutoff() > 0.1
     }
 
-    /// n_max for `box_length`. A fixed k-space cutoff is rounded up to whole shells with a
-    /// small tolerance, so rounding cannot add a shell when an optimized splitting is rebuilt,
-    /// nor when a virtual-volume perturbation rescales the box.
+    /// n_max for a new instance in `box_length`. A fixed k-space cutoff is rounded up to whole
+    /// shells with a small tolerance, so rebuilding an optimized splitting at its own box
+    /// cannot add a shell.
     pub(super) fn n_max(&self, box_length: &[f64; 3]) -> u32 {
         match self.mode {
             Mode::Analytic => {
                 parameters::ewald_n_max(box_length, self.alpha, self.accuracy, self.kappa)
             }
             Mode::Fixed { k_cut } => parameters::n_max_from_k_cut(k_cut, box_length, 1e-6),
+        }
+    }
+
+    /// n_max after an existing instance with `current` shells moves to `box_length`.
+    ///
+    /// A fixed α keeps its index set and lets |k| scale with the box, so the energy is
+    /// smooth in L. Re-deriving from `k_cut` would add a whole shell for any expansion
+    /// past the rounding tolerance, since an optimized cutoff sits exactly on a shell.
+    pub(super) fn rebuilt_n_max(&self, current: u32, box_length: &[f64; 3]) -> u32 {
+        match self.mode {
+            Mode::Analytic => self.n_max(box_length),
+            Mode::Fixed { .. } => current,
         }
     }
 
