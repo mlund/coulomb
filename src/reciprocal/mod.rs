@@ -171,7 +171,8 @@ impl EwaldReciprocal {
 
     /// Rebuild k-vectors for a new box or policy; the splitting decides n_max.
     fn rebuild(&mut self, box_length: [f64; 3], policy: EwaldPolicy) {
-        let next = Self::from_splitting(&self.splitting, box_length, policy);
+        let n_max = self.splitting.rebuilt_n_max(self.n_max, &box_length);
+        let next = Self::build_explicit(box_length, self.splitting, n_max, policy);
         self.adopt(next);
     }
 
@@ -363,8 +364,9 @@ impl EwaldReciprocal {
     /// Recompute all structure factors from scratch. $O(N \times N_k)$.
     ///
     /// If `box_length` is `Some`, rebuilds the k-vectors first: default parameters are
-    /// re-derived from `accuracy`, while an optimized or user-set α is kept along with its
-    /// k-space cutoff.
+    /// re-derived from `accuracy`, while an optimized or user-set α keeps its k-vector index
+    /// set ($n_\text{max}$), so the energy is smooth in the box length. After a large
+    /// deliberate box change, build afresh with [`Self::from_splitting`] to restore accuracy.
     /// If `optimize` is true and κ > 0 (Yukawa), jointly optimizes α and $n_\text{max}$
     /// to minimize the number of k-vectors while preserving energy accuracy.
     /// No-op for pure Coulomb (κ = 0) or IPBC policy.
@@ -1394,18 +1396,17 @@ mod tests {
         assert_relative_eq!(ewald.energy(), fresh.energy(), max_relative = 1e-12);
     }
 
-    /// Expanding the box must keep the accuracy target: n_max and α match a fresh build, both
-    /// for default parameters (plain Coulomb and Yukawa NPT) and for a fixed α.
+    /// Default parameters keep the accuracy target as the box grows: n_max and α match a fresh
+    /// build (plain Coulomb and Yukawa NPT).
     #[test]
-    fn rescale_matches_fresh_build() {
+    fn analytic_rescale_matches_fresh_build() {
         let (px, py, pz, q) = build_cppm_lattice(100.0, 2);
         type Build = fn([f64; 3]) -> EwaldReciprocal;
-        let builders: [(&str, Build); 3] = [
+        let builders: [(&str, Build); 2] = [
             ("coulomb", |b| EwaldReciprocal::new(b, 20.0, 1e-4, None)),
             ("yukawa", |b| {
                 EwaldReciprocal::new(b, 20.0, 1e-4, Some(30.0))
             }),
-            ("fixed α", fixed_alpha),
         ];
         for (name, build) in builders {
             for i in 0..=40 {
@@ -1417,6 +1418,49 @@ mod tests {
                 assert_eq!(ewald.alpha(), fresh.alpha(), "{name}");
             }
         }
+    }
+
+    /// A fixed α keeps its k-vector index set through box changes, so the energy is smooth in
+    /// L; only a fresh build at the new box re-derives n_max.
+    #[test]
+    fn fixed_alpha_rescale_keeps_index_set() {
+        let (px, py, pz, q) = build_cppm_lattice(100.0, 2);
+        let mut ewald = fixed_alpha([100.0; 3]);
+        let (n_max, n_k) = (ewald.n_max(), ewald.num_k_vectors());
+        let mut grew = false;
+        for i in 1..=100 {
+            let l = 100.0 * (1.0 + 0.0025 * f64::from(i));
+            ewald.update_all(&px, &py, &pz, &q, Some([l; 3]), false);
+            assert_eq!(ewald.n_max(), n_max, "L = {l}");
+            assert_eq!(ewald.num_k_vectors(), n_k, "L = {l}");
+            assert_eq!(ewald.alpha(), 0.05);
+            let fresh =
+                EwaldReciprocal::from_splitting(&ewald.splitting(), [l; 3], EwaldPolicy::PBC);
+            grew |= fresh.n_max() > n_max;
+        }
+        assert!(
+            grew,
+            "precondition: a fresh build at the largest box needs more shells"
+        );
+    }
+
+    /// Expanding past the rounding tolerance must not add a k-shell: an optimized k-space
+    /// cutoff sits exactly on a shell, so one would put a finite step into ΔU (coulomb#9).
+    #[test]
+    fn optimized_energy_is_continuous_under_expansion() {
+        let (mut ewald, l_box, [px, py, pz, q]) = optimized_cppm();
+        let (n_max, n_k, e0) = (ewald.n_max(), ewald.num_k_vectors(), ewald.energy());
+        let de: Vec<f64> = [1e-4, 2e-4]
+            .iter()
+            .map(|d| {
+                ewald.update_all(&px, &py, &pz, &q, Some([l_box * (1.0 + d); 3]), false);
+                assert_eq!(ewald.n_max(), n_max, "δ = {d}");
+                assert_eq!(ewald.num_k_vectors(), n_k, "δ = {d}");
+                ewald.energy() - e0
+            })
+            .collect();
+        // Linear in δ: doubling the expansion doubles the change (f32 k-vectors limit precision)
+        assert_relative_eq!(de[1], 2.0 * de[0], max_relative = 1e-2);
     }
 
     /// Default parameters re-derive n_max when switching policy, as before.
