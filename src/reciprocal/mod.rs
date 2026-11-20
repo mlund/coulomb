@@ -598,6 +598,18 @@ impl EwaldReciprocal {
         }
     }
 
+    /// PBC k-vectors as `(kx, ky, kz, A(k))` with 4π/V, or `None` for IPBC.
+    pub(crate) fn packed_kvectors(&self) -> Option<(Vec<[f32; 4]>, f64)> {
+        if self.policy != EwaldPolicy::PBC {
+            return None;
+        }
+        let k = &self.kvecs;
+        let packed = (0..k.len())
+            .map(|i| [k.kx[i], k.ky[i], k.kz[i], k.aks[i]])
+            .collect();
+        Some((packed, self.four_pi_over_v))
+    }
+
     /// Number of k-vectors (for diagnostics).
     pub fn num_k_vectors(&self) -> usize {
         self.kvecs.len()
