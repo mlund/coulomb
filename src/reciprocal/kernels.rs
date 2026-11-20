@@ -327,7 +327,7 @@ pub(super) fn force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &
 
 /// IPBC force on one particle.
 ///
-/// $F_{i,\alpha} = -\frac{4\pi q_i}{V} \sum_k A_k Q_k \cdot k_\alpha \sin(k_\alpha r_{i\alpha}) \prod_{\beta \neq \alpha} \cos(k_\beta r_{i\beta})$
+/// $F_{i,\alpha} = \frac{4\pi q_i}{V} \sum_k A_k Q_k \cdot k_\alpha \sin(k_\alpha r_{i\alpha}) \prod_{\beta \neq \alpha} \cos(k_\beta r_{i\beta})$
 #[inline]
 pub(super) fn force_ipbc(kvecs: &KVectors, pos: [f64; 3], sk_ipbc: &[f64]) -> [f64; 3] {
     let phases = Phases::new(kvecs, pos);
@@ -338,10 +338,10 @@ pub(super) fn force_ipbc(kvecs: &KVectors, pos: [f64; 3], sk_ipbc: &[f64]) -> [f
         for (j, k) in row.range().enumerate() {
             let (cz, sz) = (p.z_cos[j], p.z_sin[j]);
             let ak_q = kvecs.aks[k] as f64 * sk_ipbc[k];
-            // d/dx [cos(kx·x)·cos(ky·y)·cos(kz·z)] = -kx·sin(kx·x)·cos(ky·y)·cos(kz·z)
-            f[0] -= ak_q * kvecs.kx[k] as f64 * sx * cy * cz;
-            f[1] -= ak_q * kvecs.ky[k] as f64 * cx * sy * cz;
-            f[2] -= ak_q * kvecs.kz[k] as f64 * cx * cy * sz;
+            // F = −∇U and ∂/∂x cos(kx·x) = −kx·sin(kx·x): the two signs cancel
+            f[0] += ak_q * kvecs.kx[k] as f64 * sx * cy * cz;
+            f[1] += ak_q * kvecs.ky[k] as f64 * cx * sy * cz;
+            f[2] += ak_q * kvecs.kz[k] as f64 * cx * cy * sz;
         }
     }
     f

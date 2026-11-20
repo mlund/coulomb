@@ -557,10 +557,10 @@ impl EwaldReciprocal {
         z: &[T],
         charges: &[T],
     ) -> f64 {
-        let eps_s: f64 = self.boundary.into();
-        if eps_s.is_infinite() {
+        if self.is_tinfoil() {
             return 0.0;
         }
+        let eps_s: f64 = self.boundary.into();
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
         self.two_pi_over_v / 2.0f64.mul_add(eps_s, 1.0) * dz.mul_add(dz, dx.mul_add(dx, dy * dy))
     }
@@ -580,10 +580,10 @@ impl EwaldReciprocal {
         fy: &mut [f64],
         fz: &mut [f64],
     ) {
-        let eps_s: f64 = self.boundary.into();
-        if eps_s.is_infinite() {
+        if self.is_tinfoil() {
             return;
         }
+        let eps_s: f64 = self.boundary.into();
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
         let base = -self.four_pi_over_v / 2.0f64.mul_add(eps_s, 1.0);
         for ((&q, out_fx), (out_fy, out_fz)) in charges
@@ -596,6 +596,31 @@ impl EwaldReciprocal {
             *out_fy += c * dy;
             *out_fz += c * dz;
         }
+    }
+
+    /// Packed snapshot for device kernels; PBC and tinfoil only.
+    pub(crate) fn gpu_kspace(&self) -> crate::Result<crate::gpu::GpuKSpace> {
+        use crate::Error::Unsupported;
+        if self.policy != EwaldPolicy::PBC {
+            return Err(Unsupported("packed k-space requires PBC"));
+        }
+        if !self.is_tinfoil() {
+            return Err(Unsupported("packed k-space requires tinfoil boundary"));
+        }
+        let k = &self.kvecs;
+        let kvectors = (k.kx.iter().zip(&k.ky))
+            .zip(k.kz.iter().zip(&k.aks))
+            .map(|((&x, &y), (&z, &a))| [x, y, z, a])
+            .collect();
+        Ok(crate::gpu::GpuKSpace {
+            kvectors,
+            force_prefactor: self.four_pi_over_v,
+        })
+    }
+
+    /// ε_s = ∞: the surface term vanishes.
+    fn is_tinfoil(&self) -> bool {
+        f64::from(self.boundary).is_infinite()
     }
 
     /// Number of k-vectors (for diagnostics).
@@ -770,34 +795,51 @@ mod tests {
         assert_relative_eq!(fx[0], 100.0 + f0x, epsilon = 1e-12);
     }
 
+    /// F = −∇U for every atom and axis. Asymmetric positions: a mirror-symmetric
+    /// ± pair makes every IPBC Q(k) vanish, hiding sign errors.
     #[test]
     fn test_force_matches_numerical_gradient() {
-        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
-            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, None);
+        let pos = [
+            [-1.3, 0.4, 2.1],
+            [0.7, -2.2, 0.3],
+            [2.9, 1.1, -0.8],
+            [-0.4, 3.3, -2.6],
+        ];
+        let charges = [1.0, -1.0, 0.5, -0.5];
+        let coords = |pos: &[[f64; 3]]| -> [Vec<f64>; 3] {
+            [0, 1, 2].map(|a| pos.iter().map(|p| p[a]).collect())
+        };
+        let cases = [EwaldPolicy::PBC, EwaldPolicy::IPBC]
+            .into_iter()
+            .flat_map(|p| [None, Some(8.0)].map(|d| (p, d)));
+        for (policy, debye_length) in cases {
+            let mut ewald = EwaldReciprocal::new([10.0; 3], 5.0, 1e-5, debye_length);
             ewald.set_policy(policy);
-            let (x, y, z) = ([-0.5, 0.5], [0.1, -0.1], [0.2, -0.2]);
-            let charges = [1.0, -1.0];
-            ewald.update_all(&x, &y, &z, &charges, None, false);
-            let [fx, fy, fz] = ewald.force([x[0], y[0], z[0]], charges[0]);
+            let mut energy = |pos: &[[f64; 3]]| {
+                let [x, y, z] = coords(pos);
+                ewald.update_all(&x, &y, &z, &charges, None, false);
+                ewald.energy()
+            };
             let delta = 1e-5;
-
-            ewald.update_all(&[-0.5 + delta, 0.5], &y, &z, &charges, None, false);
-            let ep = ewald.energy();
-            ewald.update_all(&[-0.5 - delta, 0.5], &y, &z, &charges, None, false);
-            let em = ewald.energy();
-            assert_relative_eq!(fx, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
-
-            ewald.update_all(&x, &[0.1 + delta, -0.1], &z, &charges, None, false);
-            let ep = ewald.energy();
-            ewald.update_all(&x, &[0.1 - delta, -0.1], &z, &charges, None, false);
-            let em = ewald.energy();
-            assert_relative_eq!(fy, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
-
-            ewald.update_all(&x, &y, &[0.2 + delta, -0.2], &charges, None, false);
-            let ep = ewald.energy();
-            ewald.update_all(&x, &y, &[0.2 - delta, -0.2], &charges, None, false);
-            let em = ewald.energy();
-            assert_relative_eq!(fz, -(ep - em) / (2.0 * delta), epsilon = 1e-3);
+            let mut numeric = [[0.0; 3]; 4];
+            for (i, f) in numeric.iter_mut().enumerate() {
+                for (a, fa) in f.iter_mut().enumerate() {
+                    let mut p = pos;
+                    p[i][a] += delta;
+                    let ep = energy(&p);
+                    p[i][a] -= 2.0 * delta;
+                    let em = energy(&p);
+                    *fa = -(ep - em) / (2.0 * delta);
+                }
+            }
+            energy(&pos);
+            for (i, f) in numeric.iter().enumerate() {
+                let analytic = ewald.force(pos[i], charges[i]);
+                for a in 0..3 {
+                    assert!(f[a].abs() > 1e-4, "{policy:?}: degenerate test, F ≈ 0");
+                    assert_relative_eq!(analytic[a], f[a], max_relative = 1e-4);
+                }
+            }
         }
     }
 

@@ -117,6 +117,9 @@ ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
 
 Both `f32` and `f64` input slices are accepted (generic over `Into<f64> + Copy`).
 
+For GPU force kernels, `gpu::GpuKSpace` packs the PBC k-vectors and A(k) as one `f32` vec4 per
+k-vector, and documents the force formula a kernel must reproduce.
+
 ### Unit analysis
 
 Experimental support for static unit analysis can be activated with the `uom` feature.
