@@ -25,8 +25,8 @@ use crate::Error;
 /// A snapshot: rebuild after the box or the k-vector set changes.
 #[derive(Debug, Clone)]
 pub struct GpuKSpace {
-    kvectors: Vec<[f32; 4]>,
-    force_prefactor: f64,
+    pub(crate) kvectors: Vec<[f32; 4]>,
+    pub(crate) force_prefactor: f64,
 }
 
 impl GpuKSpace {
@@ -45,11 +45,7 @@ impl TryFrom<&EwaldReciprocal> for GpuKSpace {
     type Error = Error;
 
     fn try_from(ewald: &EwaldReciprocal) -> Result<Self, Error> {
-        let (kvectors, force_prefactor) = ewald.packed_kvectors()?;
-        Ok(Self {
-            kvectors,
-            force_prefactor,
-        })
+        ewald.gpu_kspace()
     }
 }
 

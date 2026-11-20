@@ -557,10 +557,10 @@ impl EwaldReciprocal {
         z: &[T],
         charges: &[T],
     ) -> f64 {
-        let eps_s: f64 = self.boundary.into();
-        if eps_s.is_infinite() {
+        if self.is_tinfoil() {
             return 0.0;
         }
+        let eps_s: f64 = self.boundary.into();
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
         self.two_pi_over_v / 2.0f64.mul_add(eps_s, 1.0) * dz.mul_add(dz, dx.mul_add(dx, dy * dy))
     }
@@ -580,10 +580,10 @@ impl EwaldReciprocal {
         fy: &mut [f64],
         fz: &mut [f64],
     ) {
-        let eps_s: f64 = self.boundary.into();
-        if eps_s.is_infinite() {
+        if self.is_tinfoil() {
             return;
         }
+        let eps_s: f64 = self.boundary.into();
         let [dx, dy, dz] = dipole_moment(x, y, z, charges);
         let base = -self.four_pi_over_v / 2.0f64.mul_add(eps_s, 1.0);
         for ((&q, out_fx), (out_fy, out_fz)) in charges
@@ -598,21 +598,29 @@ impl EwaldReciprocal {
         }
     }
 
-    /// k-vectors as `(kx, ky, kz, A(k))` with 4π/V; PBC and tinfoil only.
-    pub(crate) fn packed_kvectors(&self) -> crate::Result<(Vec<[f32; 4]>, f64)> {
+    /// Packed snapshot for device kernels; PBC and tinfoil only.
+    pub(crate) fn gpu_kspace(&self) -> crate::Result<crate::gpu::GpuKSpace> {
+        use crate::Error::Unsupported;
         if self.policy != EwaldPolicy::PBC {
-            return Err(crate::Error::Unsupported("packed k-space requires PBC"));
+            return Err(Unsupported("packed k-space requires PBC"));
         }
-        if !f64::from(self.boundary).is_infinite() {
-            return Err(crate::Error::Unsupported(
-                "packed k-space requires tinfoil boundary",
-            ));
+        if !self.is_tinfoil() {
+            return Err(Unsupported("packed k-space requires tinfoil boundary"));
         }
         let k = &self.kvecs;
-        let packed = (0..k.len())
-            .map(|i| [k.kx[i], k.ky[i], k.kz[i], k.aks[i]])
+        let kvectors = (k.kx.iter().zip(&k.ky))
+            .zip(k.kz.iter().zip(&k.aks))
+            .map(|((&x, &y), (&z, &a))| [x, y, z, a])
             .collect();
-        Ok((packed, self.four_pi_over_v))
+        Ok(crate::gpu::GpuKSpace {
+            kvectors,
+            force_prefactor: self.four_pi_over_v,
+        })
+    }
+
+    /// ε_s = ∞: the surface term vanishes.
+    fn is_tinfoil(&self) -> bool {
+        f64::from(self.boundary).is_infinite()
     }
 
     /// Number of k-vectors (for diagnostics).
