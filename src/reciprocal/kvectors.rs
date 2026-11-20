@@ -9,6 +9,29 @@ pub(super) struct KVectors {
     pub(super) ky: Vec<f32>,
     pub(super) kz: Vec<f32>,
     pub(super) aks: Vec<f32>,
+    /// Runs of k-vectors sharing (nx, ny), in storage order.
+    pub(super) rows: Vec<Row>,
+    /// Phase-table geometry for [`super::kernels::Phases`].
+    pub(super) two_pi_over_l: [f64; 3],
+    pub(super) n_max: u32,
+}
+
+/// K-vectors `start..start + len` share (nx, ny) and have consecutive nz from `nz`.
+/// `nx`, `ny` and `nz` are n + n_max, indices into a per-axis phase table.
+#[derive(Clone, Copy)]
+pub(super) struct Row {
+    pub start: u32,
+    pub len: u32,
+    pub nx: u32,
+    pub ny: u32,
+    pub nz: u32,
+}
+
+impl Row {
+    #[inline(always)]
+    pub fn range(&self) -> core::ops::Range<usize> {
+        self.start as usize..(self.start + self.len) as usize
+    }
 }
 
 impl KVectors {
@@ -46,6 +69,7 @@ impl KVectors {
         let mut ky = Vec::with_capacity(estimate);
         let mut kz = Vec::with_capacity(estimate);
         let mut aks = Vec::with_capacity(estimate);
+        let mut rows: Vec<Row> = Vec::new();
 
         // PBC uses a half-shell: nx >= 0, with ny/nz going negative only when a
         // higher index is positive. This avoids counting each ±k pair twice.
@@ -96,11 +120,30 @@ impl KVectors {
                     ky.push(kvy as f32);
                     kz.push(kvz as f32);
                     aks.push(ak as f32);
+                    let offset = |n: i32| (n + n_max_i) as u32;
+                    match rows.last_mut() {
+                        Some(r) if r.nx == offset(nx) && r.ny == offset(ny) => r.len += 1,
+                        _ => rows.push(Row {
+                            start: kx.len() as u32 - 1,
+                            len: 1,
+                            nx: offset(nx),
+                            ny: offset(ny),
+                            nz: offset(nz),
+                        }),
+                    }
                 }
             }
         }
 
-        Self { kx, ky, kz, aks }
+        Self {
+            kx,
+            ky,
+            kz,
+            aks,
+            rows,
+            two_pi_over_l,
+            n_max,
+        }
     }
 
     pub fn len(&self) -> usize {

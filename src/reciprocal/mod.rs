@@ -58,7 +58,7 @@
 //! further reduce k-vectors by jointly scanning (α, $n_\text{max}$) against
 //! actual particle data (PBC only; no-op for Coulomb and IPBC).
 
-mod backend;
+mod kernels;
 mod kvectors;
 pub(crate) mod parameters;
 mod splitting;
@@ -66,6 +66,10 @@ mod splitting;
 pub use splitting::EwaldSplitting;
 
 use core::f64::consts::PI;
+use kernels::{
+    energy_change_ipbc, energy_change_pbc, energy_ipbc, energy_pbc, force_ipbc, force_pbc,
+    update_all_ipbc, update_all_pbc, update_particle_ipbc, update_particle_pbc,
+};
 use kvectors::KVectors;
 
 /// √π — precomputed to avoid repeated runtime `PI.sqrt()` calls.
@@ -628,37 +632,6 @@ impl EwaldReciprocal {
         self.splitting.real_space_scheme()
     }
 }
-
-// ── Backend dispatch: SIMD on x86_64, scalar elsewhere ──────────────────────
-
-/// Generate a cfg-gated dispatch function that forwards to `backend::simd::$name`
-/// on x86_64 with the `simd` feature, and `backend::scalar::$name` otherwise.
-macro_rules! dispatch {
-    ($name:ident ( $($arg:ident : $ty:ty),* $(,)? ) -> $ret:ty) => {
-        #[cfg(all(feature = "simd", target_arch = "x86_64"))]
-        fn $name($($arg: $ty),*) -> $ret {
-            backend::simd::$name($($arg),*)
-        }
-        #[cfg(not(all(feature = "simd", target_arch = "x86_64")))]
-        fn $name($($arg: $ty),*) -> $ret {
-            backend::scalar::$name($($arg),*)
-        }
-    };
-}
-
-// PBC dispatch
-dispatch!(update_all_pbc(kvecs: &KVectors, px: f64, py: f64, pz: f64, charge: f64, sk_re: &mut [f64], sk_im: &mut [f64]) -> ());
-dispatch!(energy_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64]) -> f64);
-dispatch!(energy_change_pbc(kvecs: &KVectors, sk_re: &[f64], sk_im: &[f64], charge: f64, old: [f64; 3], new: [f64; 3]) -> f64);
-dispatch!(update_particle_pbc(kvecs: &KVectors, charge: f64, old: [f64; 3], new: [f64; 3], sk_re: &mut [f64], sk_im: &mut [f64]) -> ());
-dispatch!(force_pbc(kvecs: &KVectors, pos: [f64; 3], sk_re: &[f64], sk_im: &[f64]) -> [f64; 3]);
-
-// IPBC dispatch
-dispatch!(update_all_ipbc(kvecs: &KVectors, px: f64, py: f64, pz: f64, charge: f64, sk_ipbc: &mut [f64]) -> ());
-dispatch!(energy_ipbc(kvecs: &KVectors, sk_ipbc: &[f64]) -> f64);
-dispatch!(energy_change_ipbc(kvecs: &KVectors, sk_ipbc: &[f64], charge: f64, old: [f64; 3], new: [f64; 3]) -> f64);
-dispatch!(update_particle_ipbc(kvecs: &KVectors, charge: f64, old: [f64; 3], new: [f64; 3], sk_ipbc: &mut [f64]) -> ());
-dispatch!(force_ipbc(kvecs: &KVectors, pos: [f64; 3], sk_ipbc: &[f64]) -> [f64; 3]);
 
 /// Minimum-image all-to-all real-space energy (O(N²)).
 fn real_space_energy(
