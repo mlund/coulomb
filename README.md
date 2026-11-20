@@ -28,7 +28,7 @@ The main purpose is to offer support for molecular simulation software.
 - Extensive library of truncated electrostatic interaction schemes such as
   _Wolf_, _Reaction field_, _Real-space Ewald_, generalized through a short-range function `trait`.
 - Reciprocal-space Ewald summation for Coulomb and Yukawa potentials (PBC and IPBC),
-  with automatic parameter optimization, mixed f32/f64 precision, and SIMD acceleration on x86_64.
+  with automatic parameter optimization and axis-separable phase factors.
 - Ewald summation with and without implicit salt.
 - Multipole expansion for _energies_, _forces_, _fields_ between ions, dipoles, and quadrupoles.
 - Extensively unit tested and may serve as reference for other implementations or approximations.
@@ -116,8 +116,6 @@ ewald.add_forces(&x, &y, &z, &charges, &mut fx, &mut fy, &mut fz);
 ~~~
 
 Both `f32` and `f64` input slices are accepted (generic over `Into<f64> + Copy`).
-On x86_64 with the `simd` feature, a polynomial sin/cos with SIMD vectorization accelerates
-the inner loops.
 
 ### Unit analysis
 
