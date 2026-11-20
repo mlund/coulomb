@@ -11,12 +11,13 @@ pub(super) struct KVectors {
     pub(super) aks: Vec<f32>,
     /// Runs of k-vectors sharing (nx, ny), in storage order.
     pub(super) rows: Vec<Row>,
-    two_pi_over_l: [f64; 3],
-    n_max: u32,
+    /// Phase-table geometry for [`super::kernels::Phases`].
+    pub(super) two_pi_over_l: [f64; 3],
+    pub(super) n_max: u32,
 }
 
 /// K-vectors `start..start + len` share (nx, ny) and have consecutive nz from `nz`.
-/// Fields other than `start` and `len` are indices into a [`Phases`] axis table.
+/// `nx`, `ny` and `nz` are n + n_max, indices into a per-axis phase table.
 #[derive(Clone, Copy)]
 pub(super) struct Row {
     pub start: u32,
@@ -31,72 +32,6 @@ impl Row {
     pub fn range(&self) -> core::ops::Range<usize> {
         self.start as usize..(self.start + self.len) as usize
     }
-}
-
-/// Per-axis phase factors e^{i n θ_a}, θ_a = 2π r_a / L_a, indexed by n + n_max.
-///
-/// e^{ik·r} factorizes over axes, so a particle costs three sin_cos calls and a
-/// recurrence instead of one sin_cos per k-vector. Within a [`Row`] only the z factor
-/// varies, so inner loops are contiguous and vectorize. f64 throughout, which is also
-/// more precise than f32 k·r.
-pub(super) struct Phases {
-    re: [Vec<f64>; 3],
-    im: [Vec<f64>; 3],
-}
-
-impl Phases {
-    pub fn new(kvecs: &KVectors, pos: [f64; 3]) -> Self {
-        let n = kvecs.n_max as usize;
-        let axis = |a: usize| {
-            let (s, c) = (kvecs.two_pi_over_l[a] * pos[a]).sin_cos();
-            let (mut re, mut im) = (vec![1.0_f64; 2 * n + 1], vec![0.0_f64; 2 * n + 1]);
-            for m in 1..=n {
-                let (r, i) = (re[n + m - 1], im[n + m - 1]);
-                (re[n + m], im[n + m]) = (madd(r, c, -i * s), madd(r, s, i * c));
-                (re[n - m], im[n - m]) = (re[n + m], -im[n + m]);
-            }
-            (re, im)
-        };
-        let [x, y, z] = [axis(0), axis(1), axis(2)];
-        Self {
-            re: [x.0, y.0, z.0],
-            im: [x.1, y.1, z.1],
-        }
-    }
-
-    /// (cos, sin) of k_a r_a on axis `a`.
-    #[inline(always)]
-    pub fn axis(&self, a: usize, i: u32) -> (f64, f64) {
-        (self.re[a][i as usize], self.im[a][i as usize])
-    }
-
-    /// e^{i(kx·x + ky·y)} for the row, and its z factors as (cos, sin) slices.
-    #[inline(always)]
-    pub fn row(&self, row: &Row) -> ((f64, f64), &[f64], &[f64]) {
-        let (c, d) = self.axis(1, row.ny);
-        let z = row.nz as usize..(row.nz + row.len) as usize;
-        (
-            cmul(self.axis(0, row.nx), c, d),
-            &self.re[2][z.clone()],
-            &self.im[2][z],
-        )
-    }
-}
-
-/// a·b + c, fused only where FMA is a native instruction: elsewhere `mul_add` calls a
-/// software fma, several times slower than the loop it sits in.
-#[inline(always)]
-pub(super) fn madd(a: f64, b: f64, c: f64) -> f64 {
-    #[cfg(any(target_arch = "aarch64", target_feature = "fma"))]
-    return a.mul_add(b, c);
-    #[cfg(not(any(target_arch = "aarch64", target_feature = "fma")))]
-    return a * b + c;
-}
-
-/// (a + ib)(c + id)
-#[inline(always)]
-pub(super) fn cmul((a, b): (f64, f64), c: f64, d: f64) -> (f64, f64) {
-    (madd(a, c, -b * d), madd(a, d, b * c))
 }
 
 impl KVectors {
@@ -220,40 +155,6 @@ impl KVectors {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-
-    /// Rows tile the k-vectors in order, and table products reproduce e^{ik·r}.
-    #[test]
-    fn phases_match_direct_exp_ikr() {
-        let box_length = [10.0, 12.0, 15.0];
-        for policy in [EwaldPolicy::PBC, EwaldPolicy::IPBC] {
-            let kvecs = KVectors::new(box_length, 6, 0.8, 0.0, policy);
-            let mut next = 0;
-            for row in &kvecs.rows {
-                assert_eq!(row.start as usize, next);
-                next += row.len as usize;
-            }
-            assert_eq!(next, kvecs.len());
-
-            // Far outside the box, so the recurrence is tested at large phases too
-            let pos = [3.7, -41.2, 118.5];
-            let phases = Phases::new(&kvecs, pos);
-            for row in &kvecs.rows {
-                let (exy, zr, zi) = phases.row(row);
-                for (j, k) in row.range().enumerate() {
-                    let n = |l: f64, kl: f32| (kl as f64 * l / (2.0 * PI)).round();
-                    let kr: f64 = (0..3)
-                        .map(|a| {
-                            let kl = [kvecs.kx[k], kvecs.ky[k], kvecs.kz[k]][a];
-                            2.0 * PI * n(box_length[a], kl) / box_length[a] * pos[a]
-                        })
-                        .sum();
-                    let (re, im) = cmul(exy, zr[j], zi[j]);
-                    assert!((re - kr.cos()).abs() < 1e-12, "{policy:?} k={k}");
-                    assert!((im - kr.sin()).abs() < 1e-12, "{policy:?} k={k}");
-                }
-            }
-        }
-    }
 
     #[test]
     fn test_kvector_count() {

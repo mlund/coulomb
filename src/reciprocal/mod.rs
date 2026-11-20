@@ -58,18 +58,18 @@
 //! further reduce k-vectors by jointly scanning (α, $n_\text{max}$) against
 //! actual particle data (PBC only; no-op for Coulomb and IPBC).
 
-mod backend;
+mod kernels;
 mod kvectors;
 pub(crate) mod parameters;
 mod splitting;
 
 pub use splitting::EwaldSplitting;
 
-use backend::scalar::{
+use core::f64::consts::PI;
+use kernels::{
     energy_change_ipbc, energy_change_pbc, energy_ipbc, energy_pbc, force_ipbc, force_pbc,
     update_all_ipbc, update_all_pbc, update_particle_ipbc, update_particle_pbc,
 };
-use core::f64::consts::PI;
 use kvectors::KVectors;
 
 /// √π — precomputed to avoid repeated runtime `PI.sqrt()` calls.
