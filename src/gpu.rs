@@ -10,7 +10,12 @@
 //!
 //! The sum runs over a half-shell of k-vectors; A(k) already carries the factor 2
 //! for the omitted −**k**, so the kernel needs no symmetry branch.
-//! Tinfoil boundary only: [`EwaldReciprocal::add_surface_forces`] is not included.
+//! PBC and tinfoil boundary only; other settings are refused.
+//!
+//! The k-set can be empty (Yukawa with a short Debye length), so the reciprocal
+//! force is zero; skip the device pass rather than upload an empty buffer.
+//! In f32, sin/cos(**k**·**r**) loses precision as |**k**·**r**| grows, so wrap
+//! positions into the box before evaluating.
 
 use crate::reciprocal::EwaldReciprocal;
 use crate::Error;
@@ -40,9 +45,7 @@ impl TryFrom<&EwaldReciprocal> for GpuKSpace {
     type Error = Error;
 
     fn try_from(ewald: &EwaldReciprocal) -> Result<Self, Error> {
-        let (kvectors, force_prefactor) = ewald
-            .packed_kvectors()
-            .ok_or(Error::Unsupported("GPU k-space requires the PBC policy"))?;
+        let (kvectors, force_prefactor) = ewald.packed_kvectors()?;
         Ok(Self {
             kvectors,
             force_prefactor,
@@ -129,6 +132,16 @@ mod tests {
     fn ipbc_is_refused() {
         let mut ewald = EwaldReciprocal::new([20.0; 3], 8.0, 1e-5, None);
         ewald.set_policy(crate::EwaldPolicy::IPBC);
+        assert!(matches!(
+            GpuKSpace::try_from(&ewald),
+            Err(Error::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn non_tinfoil_boundary_is_refused() {
+        let mut ewald = EwaldReciprocal::new([20.0; 3], 8.0, 1e-5, None);
+        ewald.set_boundary(crate::permittivity::VACUUM);
         assert!(matches!(
             GpuKSpace::try_from(&ewald),
             Err(Error::Unsupported(_))
